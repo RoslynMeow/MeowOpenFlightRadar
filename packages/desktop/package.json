@@ -1,0 +1,64 @@
+{
+  "name": "@flightradar/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FlightRadar desktop app (Electron)",
+  "author": "FlightRadar",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dist:dir": "npm run build && electron-builder --dir",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "devDependencies": {
+    "@flightradar/server": "*",
+    "@flightradar/web": "*",
+    "electron": "44.7.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.25.0"
+  },
+  "build": {
+    "appId": "com.flightradar.desktop",
+    "productName": "FlightRadar",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../web/dist",
+        "to": "web"
+      },
+      {
+        "from": "../server/data",
+        "to": "data"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": [
+        "zip"
+      ],
+      "category": "public.app-category.travel"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    }
+  }
+}

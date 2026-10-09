@@ -1,0 +1,18 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+.env.local
+
+# electron-builder output
+packages/desktop/release*/
+
+# generated airport data (run `npm run import:airports`)
+packages/server/data/airports.json
+packages/server/data/navaids.json
+packages/server/data/aircraft-db.json
+
+# generated airspace data (run `npm run import:airspace`)
+packages/server/data/airspace/
+packages/server/data/fir.geojson

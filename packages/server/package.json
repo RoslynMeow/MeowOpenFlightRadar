@@ -1,0 +1,31 @@
+{
+  "name": "@flightradar/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env NODE_USE_ENV_PROXY=1 tsx src/dev.ts",
+    "start": "cross-env NODE_USE_ENV_PROXY=1 tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "import:airports": "node scripts/import-airports.mjs",
+    "import:airspace": "cross-env NODE_USE_ENV_PROXY=1 node scripts/import-airspace.mjs",
+    "import:fir": "cross-env NODE_USE_ENV_PROXY=1 node scripts/import-fir.mjs",
+    "install:chromium": "playwright-core install chromium"
+  },
+  "dependencies": {
+    "@flightradar/shared": "*",
+    "@hono/node-server": "^1.13.7",
+    "cheerio": "^1.2.0",
+    "hono": "^4.6.14",
+    "lru-cache": "^11.0.2",
+    "playwright-core": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.14",
+    "@types/node": "^22.10.2",
+    "cross-env": "^7.0.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.4.0",
+    "vite": "^6.0.3"
+  }
+}

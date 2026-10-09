@@ -1,0 +1,112 @@
+name: build-release
+
+# 推到 main / master 即检测版本号：该版本已发布过就跳过；没有才构建并发布
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # 读取 package.json 的版本号，并判断该版本的 Release 是否已存在
+  version:
+    name: check version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.value }}
+      should_release: ${{ steps.check.outputs.exists == 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version from package.json
+        id: ver
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version = v$VERSION"
+
+      - name: Check whether v${{ steps.ver.outputs.value }} is already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.ver.outputs.value }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::v${{ steps.ver.outputs.value }} 已发布，跳过构建。"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::v${{ steps.ver.outputs.value }} 尚未发布，将构建并发布。"
+          fi
+
+  # 只有版本号未发布时才构建（win / mac / linux 便携版）
+  build:
+    name: build (${{ matrix.target }})
+    needs: version
+    if: needs.version.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+          - os: ubuntu-latest
+            target: linux
+          - os: macos-latest
+            target: mac
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Sync desktop version to ${{ needs.version.outputs.version }}
+        run: |
+          node -e "const fs=require('fs');const v=require('./package.json').version;const p='packages/desktop/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version=v;fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');console.log('desktop -> '+v)"
+
+      - name: Prepare data (airports / navaids / airspace / fir)
+        run: npm run setup:data
+
+      - name: Build web
+        run: npm run build -w @flightradar/web
+
+      - name: Build portable (${{ matrix.target }})
+        run: npm run dist:${{ matrix.target }} -w @flightradar/desktop
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-portable
+          path: |
+            packages/desktop/release/*.exe
+            packages/desktop/release/*.AppImage
+            packages/desktop/release/*.zip
+          if-no-files-found: ignore
+
+  # 只把 Windows 便携版发布到 Release（tag = v<版本号>）
+  release-windows:
+    name: publish Windows portable
+    needs: [version, build]
+    if: needs.version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows portable
+        uses: actions/download-artifact@v4
+        with:
+          name: win-portable
+          path: artifacts
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: FlightRadar v${{ needs.version.outputs.version }}
+          files: artifacts/**/*.exe
+          fail_on_unmatched_files: true

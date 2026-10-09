@@ -1,0 +1,30 @@
+{
+  "name": "flightradar-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Flight tracking map built on MeowTileKit",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "setup:data": "node packages/server/scripts/setup-data.mjs",
+    "predev": "npm run setup:data",
+    "dev": "npm run dev -w @flightradar/server",
+    "dev:web": "npm run dev -w @flightradar/web",
+    "prebuild": "npm run setup:data",
+    "build": "npm run build -w @flightradar/web",
+    "prestart": "npm run setup:data",
+    "start": "npm run start -w @flightradar/server",
+    "dist:dir": "npm run setup:data && npm run build -w @flightradar/web && npm run dist:dir -w @flightradar/desktop",
+    "dist:win": "npm run setup:data && npm run build -w @flightradar/web && npm run dist:win -w @flightradar/desktop",
+    "typecheck": "npm run typecheck -w @flightradar/shared && npm run typecheck -w @flightradar/server && npm run typecheck -w @flightradar/web && npm run typecheck -w @flightradar/desktop",
+    "import:airports": "npm run import:airports -w @flightradar/server",
+    "import:airspace": "npm run import:airspace -w @flightradar/server",
+    "import:fir": "npm run import:fir -w @flightradar/server",
+    "install:chromium": "npm run install:chromium -w @flightradar/server"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

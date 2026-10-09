@@ -1,0 +1,23 @@
+{
+  "name": "@flightradar/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@flightradar/shared": "*",
+    "leaflet": "^1.9.4",
+    "meow-tile-kit": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.14",
+    "@types/leaflet": "^1.9.16",
+    "typescript": "^5.4.0",
+    "vite": "^6.0.3"
+  }
+}
