@@ -70,15 +70,7 @@
         </svg>
       </button>
       <div class="legend-body">
-        <div class="legend-group">
-          <button type="button" class="legend-item" data-cat="b30"><i style="background:#5aa9ff"></i>&gt;30000ft</button>
-          <button type="button" class="legend-item" data-cat="b20"><i style="background:#41c7ff"></i>20000–30000ft</button>
-          <button type="button" class="legend-item" data-cat="b10"><i style="background:#63e07a"></i>10000–20000ft</button>
-          <button type="button" class="legend-item" data-cat="b3"><i style="background:#ffe066"></i>3000–10000ft</button>
-          <button type="button" class="legend-item" data-cat="b0"><i style="background:#ff9e2c"></i>&lt;3000ft</button>
-          <button type="button" class="legend-item" data-cat="noalt"><i style="background:#ffffff"></i>未报高度</button>
-          <button type="button" class="legend-item" data-cat="ground"><i style="background:#c084fc"></i>地面</button>
-        </div>
+        <div class="legend-group" id="legend-cats"></div>
         <div class="legend-group">
           <span class="legend-item"><i style="background:#ff5d8f"></i>跑道</span>
           <span class="legend-item"><i style="background:#4fc3f7"></i>机场</span>
@@ -106,6 +98,16 @@
           <option value="osm">OpenStreetMap</option>
           <option value="amap-sat">高德卫星图</option>
         </select>
+        <div class="title" style="margin-top:10px">显示</div>
+        <label class="set-row"><span>飞机配色</span>
+          <select id="color-mode">
+            <option value="altitude">高度</option>
+            <option value="speed">地速</option>
+            <option value="vrate">升降率</option>
+          </select>
+        </label>
+        <label class="set-row"><span>低缩放聚合</span><input type="checkbox" id="cluster-toggle" /></label>
+        <label class="set-row" id="autoupdate-row"><span>自动更新（桌面版）</span><input type="checkbox" id="autoupdate-toggle" /></label>
       </div>
     </div>
 

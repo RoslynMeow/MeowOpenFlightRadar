@@ -8,7 +8,7 @@ import type { MeowMap } from 'meow-tile-kit';
 import type { Aircraft, AircraftResult, Airport, AirportBoard, AirportFlight, AirportInfoResult, Navaid, NotamResult, TrackPoint, Weather, WeatherReport } from '@flightradar/shared';
 import { aircraftStreamUrl, getAirport, getAirportFlights, getNotams, getRunwaysGeoJSON, getSettings, getTrack, getWeather, searchAirports, setProvider, updateViewport } from './api';
 import type { AirportSummary, SettingsResponse } from './api';
-import { AircraftLayer, categoryOf } from './layers/aircraft-layer';
+import { AircraftLayer, categoriesOf, categoryOf, type ColorMode } from './layers/aircraft-layer';
 import { AviationLayer, navaidLabel } from './layers/aviation-layer';
 import { AirspaceLayer } from './layers/airspace-layer';
 import { FirLayer } from './layers/fir-layer';
@@ -66,6 +66,11 @@ const settingsModalEl = document.getElementById('settings-modal')!;
 const settingsCloseEl = document.getElementById('settings-close') as HTMLButtonElement;
 const providerSelect = document.getElementById('provider-select') as HTMLSelectElement;
 const providerNote = document.getElementById('provider-note')!;
+const legendCatsEl = document.getElementById('legend-cats')!;
+const colorModeSelect = document.getElementById('color-mode') as HTMLSelectElement;
+const clusterToggleEl = document.getElementById('cluster-toggle') as HTMLInputElement;
+const autoUpdateRowEl = document.getElementById('autoupdate-row')!;
+const autoUpdateToggleEl = document.getElementById('autoupdate-toggle') as HTMLInputElement;
 const calloutEl = document.getElementById('callout')!;
 const calloutSvgEl = document.getElementById('callout-svg') as unknown as SVGSVGElement;
 const airportDockEl = document.getElementById('airport-dock')!;
@@ -1578,8 +1583,30 @@ if (legendEl && legendHeader) {
   });
 }
 
-// ── 图例分类过滤：点击某项隐藏/显示该类飞机，关闭项置灰（持久化到 localStorage） ──
+// ── 设置：配色模式 / 低缩放聚合 / 自动更新（持久化到 localStorage） ──
+const PREF_COLOR_MODE = 'fr-color-mode';
+const PREF_CLUSTER = 'fr-cluster';
+const PREF_AUTOUPDATE = 'fr-autoupdate';
 const HIDDEN_CATS_KEY = 'fr-hidden-cats';
+
+function readPref(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writePref(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* ignore */
+  }
+}
+
+let colorMode: ColorMode = (readPref(PREF_COLOR_MODE) as ColorMode) || 'altitude';
+if (!['altitude', 'speed', 'vrate'].includes(colorMode)) colorMode = 'altitude';
+
 const hiddenCats = new Set<string>();
 try {
   const raw = localStorage.getItem(HIDDEN_CATS_KEY);
@@ -1587,29 +1614,75 @@ try {
 } catch {
   /* ignore */
 }
-document.querySelectorAll<HTMLButtonElement>('#legend button.legend-item[data-cat]').forEach((btn) => {
-  const cat0 = btn.getAttribute('data-cat');
-  if (cat0 && hiddenCats.has(cat0)) btn.classList.add('off');
-  btn.addEventListener('click', () => {
-    const cat = btn.getAttribute('data-cat');
-    if (!cat) return;
-    if (hiddenCats.has(cat)) hiddenCats.delete(cat);
-    else hiddenCats.add(cat);
-    btn.classList.toggle('off', hiddenCats.has(cat));
-    aircraftLayer.setHiddenCategories(hiddenCats);
-    try {
-      localStorage.setItem(HIDDEN_CATS_KEY, JSON.stringify([...hiddenCats]));
-    } catch {
-      /* ignore */
-    }
-    // 选中的飞机若被过滤掉，连同标注/航迹一起移除
-    for (const id of [...selectedIds]) {
-      const ac = lastAircraft.find((a) => a.icao24 === id);
-      if (ac && hiddenCats.has(categoryOf(ac))) removeCallout('ac:' + id);
-    }
+
+/** 依据配色模式渲染图例分类（点击隐藏/显示该类）。 */
+function renderLegend(): void {
+  legendCatsEl.innerHTML = categoriesOf(colorMode)
+    .map(
+      (d) =>
+        `<button type="button" class="legend-item${hiddenCats.has(d.key) ? ' off' : ''}" data-cat="${esc(d.key)}">` +
+        `<i style="background:${d.color}"></i>${esc(d.label)}</button>`,
+    )
+    .join('');
+  legendCatsEl.querySelectorAll<HTMLButtonElement>('button.legend-item[data-cat]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleCat(btn.getAttribute('data-cat') ?? ''));
   });
+}
+
+function toggleCat(cat: string): void {
+  if (!cat) return;
+  if (hiddenCats.has(cat)) hiddenCats.delete(cat);
+  else hiddenCats.add(cat);
+  const btn = legendCatsEl.querySelector<HTMLButtonElement>(`button.legend-item[data-cat="${cat}"]`);
+  btn?.classList.toggle('off', hiddenCats.has(cat));
+  aircraftLayer.setHiddenCategories(hiddenCats);
+  writePref(HIDDEN_CATS_KEY, JSON.stringify([...hiddenCats]));
+  // 选中的飞机若被过滤掉，连同标注/航迹一起移除
+  for (const id of [...selectedIds]) {
+    const ac = lastAircraft.find((a) => a.icao24 === id);
+    if (ac && hiddenCats.has(categoryOf(ac, colorMode))) removeCallout('ac:' + id);
+  }
+}
+
+// 配色模式
+colorModeSelect.value = colorMode;
+aircraftLayer.setColorMode(colorMode);
+renderLegend();
+colorModeSelect.addEventListener('change', () => {
+  colorMode = colorModeSelect.value as ColorMode;
+  writePref(PREF_COLOR_MODE, colorMode);
+  aircraftLayer.setColorMode(colorMode);
+  renderLegend();
 });
 if (hiddenCats.size) aircraftLayer.setHiddenCategories(hiddenCats);
+
+// 低缩放聚合
+{
+  const enabled = readPref(PREF_CLUSTER) === '1';
+  clusterToggleEl.checked = enabled;
+  aircraftLayer.setCluster(enabled);
+  clusterToggleEl.addEventListener('change', () => {
+    writePref(PREF_CLUSTER, clusterToggleEl.checked ? '1' : '0');
+    aircraftLayer.setCluster(clusterToggleEl.checked);
+  });
+}
+
+// 自动更新（仅桌面版；通过 preload 暴露的桥通知主进程）
+{
+  const bridge = (globalThis as { __FLIGHTRADAR__?: { electron?: boolean; setAutoUpdate?: (v: boolean) => void } })
+    .__FLIGHTRADAR__;
+  if (!bridge?.electron) {
+    autoUpdateRowEl.classList.add('hidden');
+  } else {
+    const enabled = readPref(PREF_AUTOUPDATE) !== '0';
+    autoUpdateToggleEl.checked = enabled;
+    bridge.setAutoUpdate?.(enabled);
+    autoUpdateToggleEl.addEventListener('change', () => {
+      writePref(PREF_AUTOUPDATE, autoUpdateToggleEl.checked ? '1' : '0');
+      bridge.setAutoUpdate?.(autoUpdateToggleEl.checked);
+    });
+  }
+}
 
 function renderProviders(settings: SettingsResponse): void {
   providerSelect.innerHTML = settings.providers
