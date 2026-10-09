@@ -204,6 +204,12 @@ body {
   white-space: nowrap;
 }
 
+/* 搜索结果里的“实时飞机”行 */
+.sr-item .sr-ico {
+  color: var(--accent);
+  font-size: 12px;
+}
+
 .sr-empty {
   padding: 8px;
   color: var(--muted);
@@ -1027,6 +1033,30 @@ body {
 
 .callout-close:hover {
   color: var(--text);
+}
+
+/* 跟随按钮：仅飞机标注显示（点 ⌖ 让镜头持续跟随该机） */
+.callout-follow {
+  display: none;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.callout-box[data-kind='aircraft'] .callout-follow {
+  display: inline-block;
+}
+
+.callout-follow:hover {
+  color: var(--text);
+}
+
+.callout-follow.on {
+  color: #ffd166;
 }
 
 /* 右下角缩放手柄 */

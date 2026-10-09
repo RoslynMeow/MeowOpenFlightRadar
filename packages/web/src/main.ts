@@ -136,6 +136,8 @@ interface Callout {
   anchor: AnchorFn;
   /** 用户拖动后的固定屏幕坐标；null 表示自动跟随目标。 */
   manual: { x: number; y: number } | null;
+  /** 飞机标注上的“跟随镜头”按钮。 */
+  followBtn: HTMLButtonElement;
 }
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -167,11 +169,15 @@ function upsertCallout(id: string, kind: CalloutKind, html: string, anchor: Anch
     const box = document.createElement('div');
     box.className = 'callout-box';
     box.innerHTML =
-      '<div class="callout-bar"><span class="callout-grip" title="拖动">⠿</span><span class="spacer"></span>' +
+      '<div class="callout-bar"><span class="callout-grip" title="拖动">⠿</span>' +
+      '<button type="button" class="callout-follow" title="跟随该机">⌖</button>' +
+      '<span class="spacer"></span>' +
       '<button type="button" class="callout-close" title="关闭">✕</button></div>' +
       '<div class="callout-content"></div>' +
       '<span class="callout-resize" title="缩放"></span>';
     const content = box.querySelector<HTMLElement>('.callout-content')!;
+    const followBtn = box.querySelector<HTMLButtonElement>('.callout-follow')!;
+    followBtn.addEventListener('click', () => removeFollowOrToggle(id));
     const halo = document.createElementNS(SVGNS, 'line');
     halo.setAttribute('class', 'callout-halo');
     const line = document.createElementNS(SVGNS, 'line');
@@ -181,16 +187,18 @@ function upsertCallout(id: string, kind: CalloutKind, html: string, anchor: Anch
     dot.setAttribute('r', '4');
     calloutSvgEl.append(halo, line, dot);
     calloutEl.appendChild(box);
-    c = { id, kind, box, content, halo, line, dot, anchor, manual: null };
+    c = { id, kind, box, content, halo, line, dot, anchor, manual: null, followBtn };
     callouts.set(id, c);
     attachDrag(c);
     attachResize(c);
     box.querySelector('.callout-close')?.addEventListener('click', () => removeCallout(id));
   }
   c.kind = kind;
+  c.box.dataset.kind = kind;
   c.anchor = anchor;
   c.content.innerHTML = html;
   ensureCalloutRaf();
+  updateFollowButtons();
   return c;
 }
 
@@ -204,6 +212,7 @@ function removeCallout(id: string): void {
   callouts.delete(id);
   if (id.startsWith('ac:')) {
     const icao = id.slice(3);
+    if (followId === icao) stopFollow();
     selectedIds.delete(icao);
     aircraftLayer.setSelected(selectedIds);
     const t = tracks.get(icao);
@@ -213,6 +222,71 @@ function removeCallout(id: string): void {
     }
   }
 }
+
+// ── 镜头跟随：持续把地图中心对准某架飞机（点标注上的 ⌖ 切换） ──
+let followId: string | null = null;
+let followRaf: number | null = null;
+let lastFollowPan = 0;
+let lastFollowViewport = 0;
+
+function removeFollowOrToggle(calloutId: string): void {
+  if (!calloutId.startsWith('ac:')) return;
+  const icao = calloutId.slice(3);
+  if (followId === icao) stopFollow();
+  else startFollow(icao);
+}
+
+function startFollow(icao: string): void {
+  followId = icao;
+  updateFollowButtons();
+  if (followRaf === null) followRaf = requestAnimationFrame(followTick);
+}
+
+function stopFollow(): void {
+  followId = null;
+  if (followRaf !== null) {
+    cancelAnimationFrame(followRaf);
+    followRaf = null;
+  }
+  updateFollowButtons();
+}
+
+function followTick(ts: number): void {
+  followRaf = null;
+  if (!followId) return;
+  // 约 16fps 重定位，避免抖动
+  if (ts - lastFollowPan >= 60) {
+    lastFollowPan = ts;
+    const p = aircraftLayer.positionOf(followId);
+    if (p) {
+      const q = app.toLocal(p.lat, p.lon);
+      map.panTo([q.lat, q.lng], { animate: false });
+      // 随飞机移动刷新视野数据（moveend 的防抖会被高频 panTo 不断重置）
+      if (ts - lastFollowViewport >= 1000) {
+        lastFollowViewport = ts;
+        void updateViewport(SID, currentBBox());
+        refreshOverlay();
+      }
+    } else {
+      stopFollow();
+      return;
+    }
+  }
+  followRaf = requestAnimationFrame(followTick);
+}
+
+function updateFollowButtons(): void {
+  for (const c of callouts.values()) {
+    const on = c.id.startsWith('ac:') && c.id.slice(3) === followId;
+    c.followBtn.classList.toggle('on', on);
+    c.followBtn.title = on ? '取消跟随' : '跟随该机';
+  }
+}
+
+// 用户手动拖动地图即取消跟随
+map.on('dragstart', () => {
+  if (followId) stopFollow();
+});
 
 function layoutCallouts(): void {
   for (const c of callouts.values()) layoutCallout(c);
@@ -492,30 +566,64 @@ function hideSearchResults(): void {
   searchResultsEl.innerHTML = '';
 }
 
-function renderSearchResults(items: AirportSummary[]): void {
-  if (!items.length) {
+/** 在“当前视野内的飞机”里按呼号 / 注册号 / ICAO24 匹配。 */
+function matchLiveAircraft(q: string): Aircraft[] {
+  const n = q.trim().toLowerCase();
+  if (n.length < 2) return [];
+  return lastAircraft
+    .filter((a) => {
+      const cs = (a.callsign ?? '').toLowerCase();
+      const reg = (a.registration ?? '').toLowerCase();
+      return (cs && cs.includes(n)) || (reg && reg.includes(n)) || a.icao24.includes(n);
+    })
+    .slice(0, 8);
+}
+
+function renderSearchResults(aircraft: Aircraft[], airports: AirportSummary[]): void {
+  if (!aircraft.length && !airports.length) {
     searchResultsEl.innerHTML = '<div class="sr-empty">无结果</div>';
     searchResultsEl.classList.remove('hidden');
     return;
   }
-  searchResultsEl.innerHTML = items
-    .map(
+  const rows = [
+    ...aircraft.map((a) => {
+      const label = a.callsign || a.registration || a.icao24.toUpperCase();
+      return (
+        `<button class="sr-item sr-ac" data-ac="${esc(a.icao24)}">` +
+        `<span class="sr-ico">✈</span>` +
+        `<b>${esc(label)}</b>` +
+        `<span class="sr-name">${esc(a.typeCode ?? '')}</span>` +
+        `<span class="sr-muni">${esc(a.operator ?? '')}</span>` +
+        `</button>`
+      );
+    }),
+    ...airports.map(
       (a) =>
         `<button class="sr-item" data-ident="${esc(a.ident)}">` +
         `<b>${esc(a.ident)}</b>` +
         `<span class="sr-name">${esc(a.name)}</span>` +
         `<span class="sr-muni">${esc(a.municipality ?? '')}</span>` +
         `</button>`,
-    )
-    .join('');
+    ),
+  ].join('');
+  searchResultsEl.innerHTML = rows;
   searchResultsEl.classList.remove('hidden');
   searchResultsEl.querySelectorAll<HTMLElement>('.sr-item').forEach((el) => {
     el.addEventListener('click', () => {
-      const id = el.getAttribute('data-ident') ?? '';
-      searchEl.value = id;
+      const acId = el.getAttribute('data-ac');
+      const ident = el.getAttribute('data-ident');
       hideSearchResults();
       searchEl.blur();
-      void loadAirport(id);
+      if (acId) {
+        const ac = lastAircraft.find((a) => a.icao24 === acId);
+        if (ac) {
+          searchEl.value = ac.callsign || ac.registration || acId.toUpperCase();
+          centerOnAircraft(ac);
+        }
+      } else if (ident) {
+        searchEl.value = ident;
+        void loadAirport(ident);
+      }
     });
   });
 }
@@ -528,11 +636,14 @@ searchEl.addEventListener('input', () => {
     return;
   }
   searchTimer = window.setTimeout(async () => {
+    const aircraft = matchLiveAircraft(q);
+    let airports: AirportSummary[] = [];
     try {
-      renderSearchResults(await searchAirports(q));
+      airports = await searchAirports(q);
     } catch {
-      /* ignore */
+      /* 服务端不可用时只显示飞机 */
     }
+    renderSearchResults(aircraft, airports);
   }, 200);
 });
 
@@ -1467,9 +1578,18 @@ if (legendEl && legendHeader) {
   });
 }
 
-// ── 图例分类过滤：点击某项隐藏/显示该类飞机，关闭项置灰 ──
+// ── 图例分类过滤：点击某项隐藏/显示该类飞机，关闭项置灰（持久化到 localStorage） ──
+const HIDDEN_CATS_KEY = 'fr-hidden-cats';
 const hiddenCats = new Set<string>();
+try {
+  const raw = localStorage.getItem(HIDDEN_CATS_KEY);
+  if (raw) for (const c of JSON.parse(raw) as string[]) hiddenCats.add(c);
+} catch {
+  /* ignore */
+}
 document.querySelectorAll<HTMLButtonElement>('#legend button.legend-item[data-cat]').forEach((btn) => {
+  const cat0 = btn.getAttribute('data-cat');
+  if (cat0 && hiddenCats.has(cat0)) btn.classList.add('off');
   btn.addEventListener('click', () => {
     const cat = btn.getAttribute('data-cat');
     if (!cat) return;
@@ -1477,6 +1597,11 @@ document.querySelectorAll<HTMLButtonElement>('#legend button.legend-item[data-ca
     else hiddenCats.add(cat);
     btn.classList.toggle('off', hiddenCats.has(cat));
     aircraftLayer.setHiddenCategories(hiddenCats);
+    try {
+      localStorage.setItem(HIDDEN_CATS_KEY, JSON.stringify([...hiddenCats]));
+    } catch {
+      /* ignore */
+    }
     // 选中的飞机若被过滤掉，连同标注/航迹一起移除
     for (const id of [...selectedIds]) {
       const ac = lastAircraft.find((a) => a.icao24 === id);
@@ -1484,6 +1609,7 @@ document.querySelectorAll<HTMLButtonElement>('#legend button.legend-item[data-ca
     }
   });
 });
+if (hiddenCats.size) aircraftLayer.setHiddenCategories(hiddenCats);
 
 function renderProviders(settings: SettingsResponse): void {
   providerSelect.innerHTML = settings.providers
@@ -1517,3 +1643,12 @@ getSettings()
 
 connect();
 refreshOverlay();
+
+// 开发期调试钩子（生产构建会被剔除）
+if (import.meta.env.DEV) {
+  (window as unknown as { __frDebug?: unknown }).__frDebug = {
+    aircraft: () => lastAircraft,
+    following: () => followId,
+    hidden: () => [...hiddenCats],
+  };
+}
