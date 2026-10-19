@@ -1,6 +1,6 @@
 {
   "name": "flightradar-monorepo",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Flight tracking map built on MeowTileKit",
@@ -21,7 +21,9 @@
     "typecheck": "npm run typecheck -w @flightradar/shared && npm run typecheck -w @flightradar/server && npm run typecheck -w @flightradar/web && npm run typecheck -w @flightradar/desktop",
     "import:airports": "npm run import:airports -w @flightradar/server",
     "import:airspace": "npm run import:airspace -w @flightradar/server",
+    "import:rpp": "npm run import:rpp -w @flightradar/server",
     "import:fir": "npm run import:fir -w @flightradar/server",
+    "import:cifp": "npm run import:cifp -w @flightradar/server",
     "install:chromium": "npm run install:chromium -w @flightradar/server"
   },
   "devDependencies": {

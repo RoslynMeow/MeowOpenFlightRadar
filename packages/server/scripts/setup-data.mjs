@@ -12,7 +12,9 @@ const dataDir = join(serverDir, 'data');
 const jobs = [
   { name: '机场 / 导航台 (OurAirports)', script: 'import-airports.mjs', check: ['airports.json', 'navaids.json'] },
   { name: '空域 (openAIP)', script: 'import-airspace.mjs', check: [join('airspace', 'index.json')] },
+  { name: '报告点 (openAIP)', script: 'import-reporting-points.mjs', check: ['reporting-points.json'] },
   { name: '情报区 (VATSpy)', script: 'import-fir.mjs', check: ['fir.geojson'] },
+  { name: '进离场程序 / 航路点 (FAA CIFP)', script: 'import-cifp.mjs', check: ['cifp-procedures.json', 'cifp-fixes.json'] },
 ];
 
 let imported = 0;

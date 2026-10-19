@@ -12,8 +12,11 @@ import { SourceManager } from './manager.js';
 import { listProviders } from './sources/index.js';
 import { airportsInBBox, getAirport, hasAirportData, runwaysGeoJSON, runwaysInBBox, searchAirports } from './airports.js';
 import { hasNavaidData, navaidsInBBox } from './navaids.js';
+import { hasReportingPointData, reportingPointsInBBox } from './reporting-points.js';
+import { fixesInBBox, hasCifpData, proceduresForAirport } from './cifp.js';
 import { airspaceInBBox, hasAirspaceData } from './airspace.js';
 import { firInBBox, hasFirData } from './fir.js';
+import { SKYVECTOR_PROTOIDS, skyvectorGridSize, skyvectorMeta, skyvectorTile } from './skyvector.js';
 import { getWeather } from './weather.js';
 import { getNotams, hasNotamSource } from './notam.js';
 
@@ -80,6 +83,8 @@ app.get('/health', (c) =>
     provider: manager.getId(),
     hasAirportData: hasAirportData(),
     hasNavaidData: hasNavaidData(),
+    hasReportingPointData: hasReportingPointData(),
+    hasCifpData: hasCifpData(),
     hasAirspaceData: hasAirspaceData(),
     hasFirData: hasFirData(),
     hasNotamSource: hasNotamSource(),
@@ -134,6 +139,21 @@ app.get('/api/navaids', (c) => {
   return c.json({ count: items.length, items });
 });
 
+app.get('/api/reporting-points', (c) => {
+  const bbox = parseBBoxString(c.req.query('bbox'));
+  if (!bbox) return c.json({ error: 'invalid bbox, expected lamin,lomin,lamax,lomax' }, 400);
+  const items = inBBoxParts(bbox, (b) => reportingPointsInBBox(b));
+  return c.json({ count: items.length, items });
+});
+
+// IFR 航路点（FAA CIFP）
+app.get('/api/waypoints', (c) => {
+  const bbox = parseBBoxString(c.req.query('bbox'));
+  if (!bbox) return c.json({ error: 'invalid bbox, expected lamin,lomin,lamax,lomax' }, 400);
+  const items = inBBoxParts(bbox, (b) => fixesInBBox(b));
+  return c.json({ count: items.length, items });
+});
+
 app.get('/api/airspace', (c) => {
   const bbox = parseBBoxString(c.req.query('bbox'));
   if (!bbox) return c.json({ error: 'invalid bbox, expected lamin,lomin,lamax,lomax' }, 400);
@@ -162,6 +182,12 @@ app.get('/api/airports/:ident/runways.geojson', (c) => {
   const airport = getAirport(c.req.param('ident'));
   if (!airport) return c.json({ error: 'airport not found' }, 404);
   return c.json(runwaysGeoJSON(airport));
+});
+
+// 某机场的 SID/STAR 进离场程序（FAA CIFP）
+app.get('/api/airports/:ident/procedures', (c) => {
+  const ident = c.req.param('ident').toUpperCase();
+  return c.json(proceduresForAirport(ident));
 });
 
 // FlightAware 机场航班板（到达/出发/在途/计划），60s 缓存
@@ -209,6 +235,42 @@ app.get('/api/notam', async (c) => {
   const target = c.req.query('q') ?? '';
   try {
     return c.json(await getNotams(target));
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+// ── SkyVector World 航图（Jeppesen 数据，仅供个人测试）：token 代理 + 瓦片缓存 ──
+app.get('/api/skyvector/meta', async (c) => {
+  try {
+    return c.json(await skyvectorMeta());
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+// 原生 (scale,x,y) 瓦片透传。SkyVector 网格非 2 的幂，标准 XYZ 裁剪拼接在 web 端完成。
+app.get('/api/skyvector/raw/:protoid/:scale/:x/:y', async (c) => {
+  const protoid = Number(c.req.param('protoid'));
+  if (!SKYVECTOR_PROTOIDS.has(protoid)) return c.json({ error: 'unknown chart' }, 400);
+  const scale = Number(c.req.param('scale'));
+  const x = Number(c.req.param('x'));
+  const y = Number(c.req.param('y').replace(/\.jpg$/i, ''));
+  const n = Number.isInteger(scale) ? skyvectorGridSize(protoid, scale) : 0;
+  if (!Number.isInteger(x) || !Number.isInteger(y) || n <= 0 || x < 0 || y < 0 || x >= n || y >= n) {
+    return c.json({ error: 'invalid tile coords' }, 400);
+  }
+  try {
+    const buf = await skyvectorTile(protoid, scale, x, y);
+    if (!buf) return c.body(null, 404);
+    return new Response(buf, {
+      status: 200,
+      headers: {
+        'content-type': 'image/jpeg',
+        'cache-control': 'public, max-age=43200',
+        'access-control-allow-origin': '*',
+      },
+    });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }

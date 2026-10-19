@@ -3,28 +3,63 @@ import type { Aircraft } from '@flightradar/shared';
 import type { MeowMap } from 'meow-tile-kit';
 import { worldPixelWidth, nearestCopyX } from '../wrap';
 
-/** 地面飞机颜色（与高度色系区分）。 */
+/** 地面飞机颜色。 */
 export const GROUND_COLOR = '#c084fc';
 
-/**
- * 飞机分类（用于图例过滤）。顺序与 colorFor 一致：
- * 未报高度 → 地面 → 各高度档。
- */
-export function categoryOf(ac: Aircraft): string {
-  if (ac.altFt === null) return 'noalt';
-  if (ac.onGround) return 'ground';
-  const alt = ac.altFt;
-  if (alt < 3000) return 'b0';
-  if (alt < 10000) return 'b3';
-  if (alt < 20000) return 'b10';
-  if (alt < 30000) return 'b20';
-  return 'b30';
+export type ColorMode = 'altitude' | 'speed' | 'vrate';
+
+export interface CatDef {
+  key: string;
+  label: string;
+  color: string;
+  match: (ac: Aircraft) => boolean;
 }
 
-function colorFor(ac: Aircraft): string {
-  if (ac.altFt === null) return '#ffffff'; // 未汇报高度 → 白
-  if (ac.onGround) return GROUND_COLOR; // 地面
-  const alt = ac.altFt;
+/** 各配色模式的分类：顺序即匹配优先级，最后一项为兜底。 */
+export const COLOR_MODES: Record<ColorMode, CatDef[]> = {
+  altitude: [
+    { key: 'noalt', label: '未报高度', color: '#ffffff', match: (a) => a.altFt === null },
+    { key: 'ground', label: '地面', color: GROUND_COLOR, match: (a) => a.onGround },
+    { key: 'b0', label: '<3000ft', color: '#ff9e2c', match: (a) => (a.altFt ?? 0) < 3000 },
+    { key: 'b3', label: '3000–10000ft', color: '#ffe066', match: (a) => (a.altFt ?? 0) < 10000 },
+    { key: 'b10', label: '10000–20000ft', color: '#63e07a', match: (a) => (a.altFt ?? 0) < 20000 },
+    { key: 'b20', label: '20000–30000ft', color: '#41c7ff', match: (a) => (a.altFt ?? 0) < 30000 },
+    { key: 'b30', label: '>30000ft', color: '#5aa9ff', match: () => true },
+  ],
+  speed: [
+    { key: 'ground', label: '地面', color: GROUND_COLOR, match: (a) => a.onGround },
+    { key: 's0', label: '<120kt', color: '#6ee7b7', match: (a) => a.groundSpeedKt !== null && a.groundSpeedKt < 120 },
+    { key: 's1', label: '120–250kt', color: '#38bdf8', match: (a) => a.groundSpeedKt !== null && a.groundSpeedKt < 250 },
+    { key: 's2', label: '250–400kt', color: '#a78bfa', match: (a) => a.groundSpeedKt !== null && a.groundSpeedKt < 400 },
+    { key: 's3', label: '400–550kt', color: '#fb923c', match: (a) => a.groundSpeedKt !== null && a.groundSpeedKt < 550 },
+    { key: 's4', label: '≥550kt', color: '#ef4444', match: () => true },
+  ],
+  vrate: [
+    { key: 'ground', label: '地面', color: GROUND_COLOR, match: (a) => a.onGround },
+    { key: 'climb', label: '爬升', color: '#4ade80', match: (a) => a.verticalRateFpm !== null && a.verticalRateFpm > 500 },
+    { key: 'desc', label: '下降', color: '#f87171', match: (a) => a.verticalRateFpm !== null && a.verticalRateFpm < -500 },
+    { key: 'level', label: '平飞 / 未知', color: '#94a3b8', match: () => true },
+  ],
+};
+
+export function categoriesOf(mode: ColorMode): CatDef[] {
+  return COLOR_MODES[mode] ?? COLOR_MODES.altitude;
+}
+
+/** 飞机分类（用于图例过滤），依据当前配色模式。 */
+export function categoryOf(ac: Aircraft, mode: ColorMode = 'altitude'): string {
+  for (const d of categoriesOf(mode)) if (d.match(ac)) return d.key;
+  return 'unknown';
+}
+
+function colorFor(ac: Aircraft, mode: ColorMode): string {
+  for (const d of categoriesOf(mode)) if (d.match(ac)) return d.color;
+  return '#94a3b8';
+}
+
+/** 按平均高度取色（用于聚合点）。 */
+function colorForAltitude(alt: number | null): string {
+  if (alt === null) return '#ffffff';
   if (alt < 3000) return '#ff9e2c';
   if (alt < 10000) return '#ffe066';
   if (alt < 20000) return '#63e07a';
@@ -105,6 +140,10 @@ export class AircraftLayer extends L.Layer {
   private visibleIds: Set<string> | null = null;
   /** 被图例过滤隐藏的分类（categoryOf 的键）。 */
   private hiddenCats = new Set<string>();
+  /** 配色模式：高度 / 地速 / 升降率。 */
+  private colorMode: ColorMode = 'altitude';
+  /** 低缩放时把飞机聚合成带数字的圆点。 */
+  private clusterEnabled = false;
 
   private raf: number | null = null;
   private lastDraw = 0;
@@ -221,6 +260,18 @@ export class AircraftLayer extends L.Layer {
     this.refresh();
   }
 
+  /** 切换配色模式（高度 / 地速 / 升降率），立即重绘。 */
+  setColorMode(mode: ColorMode): void {
+    this.colorMode = mode;
+    this.refresh();
+  }
+
+  /** 是否在低缩放时聚合。 */
+  setCluster(enabled: boolean): void {
+    this.clusterEnabled = enabled;
+    this.refresh();
+  }
+
   /** 当前显示位置对应的容器像素坐标（用于跟随标注定位）；无该机时返回 null。 */
   screenPointFor(icao24: string): L.Point | null {
     const map = this.lmap;
@@ -250,7 +301,7 @@ export class AircraftLayer extends L.Layer {
     let bestD = threshold;
     const now = performance.now();
     for (const ac of this.data) {
-      if (this.hiddenCats.has(categoryOf(ac))) continue;
+      if (this.hiddenCats.has(categoryOf(ac, this.colorMode))) continue;
       if (this.visibleIds && !this.visibleIds.has(ac.icao24)) continue;
       const pos = this.positionFor(ac.icao24, now, ac);
       const local = this.app.toLocal(pos.lat, pos.lon);
@@ -343,8 +394,14 @@ export class AircraftLayer extends L.Layer {
     const worldPx = worldPixelWidth(map);
     const centerX = size.x / 2;
 
+    // 低缩放 + 开启聚合：画带数量的聚合点
+    if (this.clusterEnabled && zoom < 7) {
+      this.drawClusters(ctx, now, size, topLeft, worldPx, centerX);
+      return;
+    }
+
     for (const ac of this.data) {
-      if (this.hiddenCats.has(categoryOf(ac))) continue;
+      if (this.hiddenCats.has(categoryOf(ac, this.colorMode))) continue;
       if (this.visibleIds && !this.visibleIds.has(ac.icao24)) continue;
       const pos = this.positionFor(ac.icao24, now, ac);
       const local = this.app.toLocal(pos.lat, pos.lon);
@@ -361,6 +418,82 @@ export class AircraftLayer extends L.Layer {
     }
   }
 
+  /** 低缩放聚合：按屏幕网格统计，画圆点 + 数量，颜色取平均高度。 */
+  private drawClusters(
+    ctx: CanvasRenderingContext2D,
+    now: number,
+    size: L.Point,
+    topLeft: L.Point,
+    worldPx: number,
+    centerX: number,
+  ): void {
+    const map = this.lmap!;
+    const CELL = 46;
+    interface Bucket {
+      sx: number;
+      sy: number;
+      n: number;
+      alt: number;
+      altN: number;
+      single: Aircraft | null;
+      sTrack: number;
+    }
+    const buckets = new Map<string, Bucket>();
+    for (const ac of this.data) {
+      if (this.hiddenCats.has(categoryOf(ac, this.colorMode))) continue;
+      if (this.visibleIds && !this.visibleIds.has(ac.icao24)) continue;
+      const pos = this.positionFor(ac.icao24, now, ac);
+      const local = this.app.toLocal(pos.lat, pos.lon);
+      const raw = map.latLngToLayerPoint([local.lat, local.lng]).subtract(topLeft);
+      const x = nearestCopyX(raw.x, centerX, worldPx);
+      if (x < -CELL || x > size.x + CELL || raw.y < -CELL || raw.y > size.y + CELL) continue;
+      const key = `${Math.floor(x / CELL)}:${Math.floor(raw.y / CELL)}`;
+      let b = buckets.get(key);
+      if (!b) {
+        b = { sx: 0, sy: 0, n: 0, alt: 0, altN: 0, single: ac, sTrack: this.trackFor(ac.icao24, ac.trackDeg ?? 0) };
+        buckets.set(key, b);
+      }
+      b.sx += x;
+      b.sy += raw.y;
+      b.n += 1;
+      if (ac.altFt !== null) {
+        b.alt += ac.altFt;
+        b.altN += 1;
+      }
+      b.single = ac; // 记录任意一架，n===1 时按正常符号画
+    }
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const b of buckets.values()) {
+      const cx = b.sx / b.n;
+      const cy = b.sy / b.n;
+      if (b.n === 1 && b.single) {
+        this.drawOne(ctx, cx, cy, b.single, b.sTrack, false);
+        continue;
+      }
+      const avgAlt = b.altN ? b.alt / b.altN : null;
+      const color = colorForAltitude(avgAlt);
+      const r = Math.min(20, 7 + Math.sqrt(b.n) * 2.6);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(13,17,23,0.35)';
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.85;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#0b0f14';
+      ctx.font = `700 ${Math.min(13, 9 + r * 0.2)}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.fillText(String(b.n), cx, cy + 0.5);
+    }
+  }
+
   private drawOne(
     ctx: CanvasRenderingContext2D,
     x: number,
@@ -369,7 +502,7 @@ export class AircraftLayer extends L.Layer {
     track: number,
     labels: boolean,
   ): void {
-    const color = colorFor(ac);
+    const color = colorFor(ac, this.colorMode);
     const isSel = this.selected.has(ac.icao24);
     const isHi = this.highlighted.has(ac.icao24);
 

@@ -38,6 +38,7 @@ export class AirspaceLayer {
   private features: Feature[] = [];
   private reqId = 0;
   private lastBbox = '';
+  private enabled = true;
 
   constructor(app: MeowMap) {
     this.app = app;
@@ -46,12 +47,25 @@ export class AirspaceLayer {
     this.group = L.layerGroup().addTo(this.map);
   }
 
+  /** 显示/隐藏空域层（关闭时跳过网络请求并清空图层）。 */
+  setVisible(v: boolean): void {
+    if (v === this.enabled) return;
+    this.enabled = v;
+    if (v) this.group.addTo(this.map);
+    else this.map.removeLayer(this.group);
+  }
+
+  isVisible(): boolean {
+    return this.enabled;
+  }
+
   invalidate(): void {
     this.lastBbox = '';
   }
 
   /** 命中测试：返回包含该 WGS-84 点的空域属性（优先小面积，避免被大区域挡住）。 */
   pickLatLng(lat: number, lon: number): Record<string, unknown> | null {
+    if (!this.enabled) return null;
     let best: Record<string, unknown> | null = null;
     let bestArea = Infinity;
     for (const f of this.features) {
@@ -67,7 +81,7 @@ export class AirspaceLayer {
   }
 
   async refresh(bbox: string): Promise<void> {
-    if (bbox === this.lastBbox) return;
+    if (!this.enabled || bbox === this.lastBbox) return;
     const id = ++this.reqId;
     let data: FeatureCollection;
     try {

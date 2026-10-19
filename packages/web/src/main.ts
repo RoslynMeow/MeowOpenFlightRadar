@@ -6,14 +6,18 @@ import type { FeatureCollection } from 'geojson';
 import { createMap } from 'meow-tile-kit';
 import type { MeowMap } from 'meow-tile-kit';
 import type { Aircraft, AircraftResult, Airport, AirportBoard, AirportFlight, AirportInfoResult, Navaid, NotamResult, TrackPoint, Weather, WeatherReport } from '@flightradar/shared';
-import { aircraftStreamUrl, getAirport, getAirportFlights, getNotams, getRunwaysGeoJSON, getSettings, getTrack, getWeather, searchAirports, setProvider, updateViewport } from './api';
+import { aircraftStreamUrl, getAirport, getAirportFlights, getAirportProcedures, getNotams, getRunwaysGeoJSON, getSettings, getTrack, getWeather, searchAirports, setProvider, updateViewport } from './api';
 import type { AirportSummary, SettingsResponse } from './api';
-import { AircraftLayer, categoryOf } from './layers/aircraft-layer';
+import { AircraftLayer, categoriesOf, categoryOf, type ColorMode } from './layers/aircraft-layer';
 import { AviationLayer, navaidLabel } from './layers/aviation-layer';
 import { AirspaceLayer } from './layers/airspace-layer';
 import { FirLayer } from './layers/fir-layer';
 import { TrackLayer } from './layers/track-layer';
 import { createRunwayLayer, pickRunway, RunwayOverlay } from './layers/runway-layer';
+import { ReportingPointLayer } from './layers/reporting-point-layer';
+import { WaypointLayer } from './layers/waypoint-layer';
+import { ProcedureLayer } from './layers/procedure-layer';
+import { ChartLayer } from './layers/chart-layer';
 import { copyOffsets } from './wrap';
 
 const ALLOWED_SOURCES = ['esri', 'osm', 'amap-sat'];
@@ -48,6 +52,7 @@ weatherPane.style.zIndex = '350';
 const DATA_ATTRIBUTION =
   '空域 © <a href="https://www.openaip.net" target="_blank" rel="noopener">openAIP</a> · ' +
   '情报区 © <a href="https://github.com/vatsimnetwork/vatspy-data-project" target="_blank" rel="noopener">VATSIM/VATSpy</a> · ' +
+  '航图 © <a href="https://skyvector.com" target="_blank" rel="noopener">SkyVector</a>（Jeppesen，仅供个人测试） · ' +
   '航班数据 © <a href="https://www.flightaware.com" target="_blank" rel="noopener">FlightAware</a>';
 function refreshAttribution(): void {
   const ctrl = map.attributionControl;
@@ -66,6 +71,11 @@ const settingsModalEl = document.getElementById('settings-modal')!;
 const settingsCloseEl = document.getElementById('settings-close') as HTMLButtonElement;
 const providerSelect = document.getElementById('provider-select') as HTMLSelectElement;
 const providerNote = document.getElementById('provider-note')!;
+const legendCatsEl = document.getElementById('legend-cats')!;
+const colorModeSelect = document.getElementById('color-mode') as HTMLSelectElement;
+const clusterToggleEl = document.getElementById('cluster-toggle') as HTMLInputElement;
+const autoUpdateRowEl = document.getElementById('autoupdate-row')!;
+const autoUpdateToggleEl = document.getElementById('autoupdate-toggle') as HTMLInputElement;
 const calloutEl = document.getElementById('callout')!;
 const calloutSvgEl = document.getElementById('callout-svg') as unknown as SVGSVGElement;
 const airportDockEl = document.getElementById('airport-dock')!;
@@ -81,9 +91,16 @@ aircraftLayer.addTo(map);
 /** 每架选中飞机一条航迹（icao24 -> TrackLayer）。 */
 const tracks = new Map<string, TrackLayer>();
 const aviationLayer = new AviationLayer(app);
+// 导航台 / NDB 仅在机场预览时显示，默认关闭。
+aviationLayer.setNavaidsVisible(false);
+aviationLayer.setNdbVisible(false);
 const airspaceLayer = new AirspaceLayer(app);
 const firLayer = new FirLayer(app);
 const runwayOverlay = new RunwayOverlay(app);
+const reportingPointLayer = new ReportingPointLayer(app);
+const waypointLayer = new WaypointLayer(app);
+const procedureLayer = new ProcedureLayer(app);
+const chartLayer = new ChartLayer(app);
 
 function esc(s: unknown): string {
   return String(s ?? '').replace(/[&<>"]/g, (c) =>
@@ -119,6 +136,15 @@ function refreshOverlay(): void {
   void airspaceLayer.refresh(bbox);
   void firLayer.refresh(bbox);
   void runwayOverlay.refresh(bbox);
+  void reportingPointLayer.refresh(bbox);
+  void waypointLayer.refresh(bbox);
+}
+
+/** 机场预览开关：预览时显示导航台 / NDB，其余时段关闭。 */
+function setAirportPreview(on: boolean): void {
+  aviationLayer.setNavaidsVisible(on);
+  aviationLayer.setNdbVisible(on);
+  refreshOverlay();
 }
 
 // ── 跟随标注（可多个 + 可拖动） ──
@@ -136,6 +162,8 @@ interface Callout {
   anchor: AnchorFn;
   /** 用户拖动后的固定屏幕坐标；null 表示自动跟随目标。 */
   manual: { x: number; y: number } | null;
+  /** 飞机标注上的“跟随镜头”按钮。 */
+  followBtn: HTMLButtonElement;
 }
 
 const SVGNS = 'http://www.w3.org/2000/svg';
@@ -167,11 +195,15 @@ function upsertCallout(id: string, kind: CalloutKind, html: string, anchor: Anch
     const box = document.createElement('div');
     box.className = 'callout-box';
     box.innerHTML =
-      '<div class="callout-bar"><span class="callout-grip" title="拖动">⠿</span><span class="spacer"></span>' +
+      '<div class="callout-bar"><span class="callout-grip" title="拖动">⠿</span>' +
+      '<button type="button" class="callout-follow" title="跟随该机">⌖</button>' +
+      '<span class="spacer"></span>' +
       '<button type="button" class="callout-close" title="关闭">✕</button></div>' +
       '<div class="callout-content"></div>' +
       '<span class="callout-resize" title="缩放"></span>';
     const content = box.querySelector<HTMLElement>('.callout-content')!;
+    const followBtn = box.querySelector<HTMLButtonElement>('.callout-follow')!;
+    followBtn.addEventListener('click', () => removeFollowOrToggle(id));
     const halo = document.createElementNS(SVGNS, 'line');
     halo.setAttribute('class', 'callout-halo');
     const line = document.createElementNS(SVGNS, 'line');
@@ -181,16 +213,18 @@ function upsertCallout(id: string, kind: CalloutKind, html: string, anchor: Anch
     dot.setAttribute('r', '4');
     calloutSvgEl.append(halo, line, dot);
     calloutEl.appendChild(box);
-    c = { id, kind, box, content, halo, line, dot, anchor, manual: null };
+    c = { id, kind, box, content, halo, line, dot, anchor, manual: null, followBtn };
     callouts.set(id, c);
     attachDrag(c);
     attachResize(c);
     box.querySelector('.callout-close')?.addEventListener('click', () => removeCallout(id));
   }
   c.kind = kind;
+  c.box.dataset.kind = kind;
   c.anchor = anchor;
   c.content.innerHTML = html;
   ensureCalloutRaf();
+  updateFollowButtons();
   return c;
 }
 
@@ -204,6 +238,7 @@ function removeCallout(id: string): void {
   callouts.delete(id);
   if (id.startsWith('ac:')) {
     const icao = id.slice(3);
+    if (followId === icao) stopFollow();
     selectedIds.delete(icao);
     aircraftLayer.setSelected(selectedIds);
     const t = tracks.get(icao);
@@ -213,6 +248,71 @@ function removeCallout(id: string): void {
     }
   }
 }
+
+// ── 镜头跟随：持续把地图中心对准某架飞机（点标注上的 ⌖ 切换） ──
+let followId: string | null = null;
+let followRaf: number | null = null;
+let lastFollowPan = 0;
+let lastFollowViewport = 0;
+
+function removeFollowOrToggle(calloutId: string): void {
+  if (!calloutId.startsWith('ac:')) return;
+  const icao = calloutId.slice(3);
+  if (followId === icao) stopFollow();
+  else startFollow(icao);
+}
+
+function startFollow(icao: string): void {
+  followId = icao;
+  updateFollowButtons();
+  if (followRaf === null) followRaf = requestAnimationFrame(followTick);
+}
+
+function stopFollow(): void {
+  followId = null;
+  if (followRaf !== null) {
+    cancelAnimationFrame(followRaf);
+    followRaf = null;
+  }
+  updateFollowButtons();
+}
+
+function followTick(ts: number): void {
+  followRaf = null;
+  if (!followId) return;
+  // 约 16fps 重定位，避免抖动
+  if (ts - lastFollowPan >= 60) {
+    lastFollowPan = ts;
+    const p = aircraftLayer.positionOf(followId);
+    if (p) {
+      const q = app.toLocal(p.lat, p.lon);
+      map.panTo([q.lat, q.lng], { animate: false });
+      // 随飞机移动刷新视野数据（moveend 的防抖会被高频 panTo 不断重置）
+      if (ts - lastFollowViewport >= 1000) {
+        lastFollowViewport = ts;
+        void updateViewport(SID, currentBBox());
+        refreshOverlay();
+      }
+    } else {
+      stopFollow();
+      return;
+    }
+  }
+  followRaf = requestAnimationFrame(followTick);
+}
+
+function updateFollowButtons(): void {
+  for (const c of callouts.values()) {
+    const on = c.id.startsWith('ac:') && c.id.slice(3) === followId;
+    c.followBtn.classList.toggle('on', on);
+    c.followBtn.title = on ? '取消跟随' : '跟随该机';
+  }
+}
+
+// 用户手动拖动地图即取消跟随
+map.on('dragstart', () => {
+  if (followId) stopFollow();
+});
 
 function layoutCallouts(): void {
   for (const c of callouts.values()) layoutCallout(c);
@@ -492,30 +592,64 @@ function hideSearchResults(): void {
   searchResultsEl.innerHTML = '';
 }
 
-function renderSearchResults(items: AirportSummary[]): void {
-  if (!items.length) {
+/** 在“当前视野内的飞机”里按呼号 / 注册号 / ICAO24 匹配。 */
+function matchLiveAircraft(q: string): Aircraft[] {
+  const n = q.trim().toLowerCase();
+  if (n.length < 2) return [];
+  return lastAircraft
+    .filter((a) => {
+      const cs = (a.callsign ?? '').toLowerCase();
+      const reg = (a.registration ?? '').toLowerCase();
+      return (cs && cs.includes(n)) || (reg && reg.includes(n)) || a.icao24.includes(n);
+    })
+    .slice(0, 8);
+}
+
+function renderSearchResults(aircraft: Aircraft[], airports: AirportSummary[]): void {
+  if (!aircraft.length && !airports.length) {
     searchResultsEl.innerHTML = '<div class="sr-empty">无结果</div>';
     searchResultsEl.classList.remove('hidden');
     return;
   }
-  searchResultsEl.innerHTML = items
-    .map(
+  const rows = [
+    ...aircraft.map((a) => {
+      const label = a.callsign || a.registration || a.icao24.toUpperCase();
+      return (
+        `<button class="sr-item sr-ac" data-ac="${esc(a.icao24)}">` +
+        `<span class="sr-ico">✈</span>` +
+        `<b>${esc(label)}</b>` +
+        `<span class="sr-name">${esc(a.typeCode ?? '')}</span>` +
+        `<span class="sr-muni">${esc(a.operator ?? '')}</span>` +
+        `</button>`
+      );
+    }),
+    ...airports.map(
       (a) =>
         `<button class="sr-item" data-ident="${esc(a.ident)}">` +
         `<b>${esc(a.ident)}</b>` +
         `<span class="sr-name">${esc(a.name)}</span>` +
         `<span class="sr-muni">${esc(a.municipality ?? '')}</span>` +
         `</button>`,
-    )
-    .join('');
+    ),
+  ].join('');
+  searchResultsEl.innerHTML = rows;
   searchResultsEl.classList.remove('hidden');
   searchResultsEl.querySelectorAll<HTMLElement>('.sr-item').forEach((el) => {
     el.addEventListener('click', () => {
-      const id = el.getAttribute('data-ident') ?? '';
-      searchEl.value = id;
+      const acId = el.getAttribute('data-ac');
+      const ident = el.getAttribute('data-ident');
       hideSearchResults();
       searchEl.blur();
-      void loadAirport(id);
+      if (acId) {
+        const ac = lastAircraft.find((a) => a.icao24 === acId);
+        if (ac) {
+          searchEl.value = ac.callsign || ac.registration || acId.toUpperCase();
+          centerOnAircraft(ac);
+        }
+      } else if (ident) {
+        searchEl.value = ident;
+        void loadAirport(ident);
+      }
     });
   });
 }
@@ -528,11 +662,14 @@ searchEl.addEventListener('input', () => {
     return;
   }
   searchTimer = window.setTimeout(async () => {
+    const aircraft = matchLiveAircraft(q);
+    let airports: AirportSummary[] = [];
     try {
-      renderSearchResults(await searchAirports(q));
+      airports = await searchAirports(q);
     } catch {
-      /* ignore */
+      /* 服务端不可用时只显示飞机 */
     }
+    renderSearchResults(aircraft, airports);
   }, 200);
 });
 
@@ -584,15 +721,32 @@ async function loadAirport(ident: string): Promise<void> {
     updateWeatherBox(airport, null);
     void loadWeather(airport.ident);
     void loadAirportFlights(airport.ident);
+    void loadProcedures(airport.ident);
+    setAirportPreview(true);
   } catch (e) {
     currentAirportObj = null;
+    setAirportPreview(false);
     clearWindRose();
     clearWeatherBox();
+    procedureLayer.clear();
     adTitleEl.textContent = '未找到机场';
     adSubEl.textContent = ident;
     airportDockEl.classList.remove('hidden');
     relatedAirport = null;
     updateHighlight();
+  }
+}
+
+/** 拉取并叠加某机场的 SID/STAR（FAA CIFP；无数据时自动隐藏）。 */
+async function loadProcedures(ident: string): Promise<void> {
+  try {
+    const gj = await getAirportProcedures(ident);
+    if (relatedAirport !== ident) return;
+    procedureLayer.setData(gj.features.length ? gj : null);
+    const { sid, star } = procedureLayer.counts();
+    if (sid || star) adSubEl.textContent = `${adSubEl.textContent} · SID ${sid} / STAR ${star}`;
+  } catch {
+    if (relatedAirport === ident) procedureLayer.clear();
   }
 }
 
@@ -851,6 +1005,7 @@ fbCloseEl.addEventListener('click', () => {
   clearWindRose();
   clearWeatherBox();
   updateHighlight();
+  setAirportPreview(false);
 });
 
 /** 恢复默认布局：展开面板并取消拖动后的位置。 */
@@ -1425,6 +1580,9 @@ app.on('sourcechange', () => {
   airspaceLayer.invalidate();
   firLayer.invalidate();
   runwayOverlay.invalidate();
+  reportingPointLayer.invalidate();
+  waypointLayer.invalidate();
+  procedureLayer.invalidate();
   if (lastRunways) drawRunways(lastRunways);
   void updateViewport(SID, currentBBox());
   refreshOverlay();
@@ -1467,23 +1625,171 @@ if (legendEl && legendHeader) {
   });
 }
 
-// ── 图例分类过滤：点击某项隐藏/显示该类飞机，关闭项置灰 ──
+// ── 设置：配色模式 / 低缩放聚合 / 自动更新（持久化到 localStorage） ──
+const PREF_COLOR_MODE = 'fr-color-mode';
+const PREF_CLUSTER = 'fr-cluster';
+const PREF_AUTOUPDATE = 'fr-autoupdate';
+const HIDDEN_CATS_KEY = 'fr-hidden-cats';
+
+function readPref(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writePref(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* ignore */
+  }
+}
+
+let colorMode: ColorMode = (readPref(PREF_COLOR_MODE) as ColorMode) || 'altitude';
+if (!['altitude', 'speed', 'vrate'].includes(colorMode)) colorMode = 'altitude';
+
 const hiddenCats = new Set<string>();
-document.querySelectorAll<HTMLButtonElement>('#legend button.legend-item[data-cat]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const cat = btn.getAttribute('data-cat');
-    if (!cat) return;
-    if (hiddenCats.has(cat)) hiddenCats.delete(cat);
-    else hiddenCats.add(cat);
-    btn.classList.toggle('off', hiddenCats.has(cat));
-    aircraftLayer.setHiddenCategories(hiddenCats);
-    // 选中的飞机若被过滤掉，连同标注/航迹一起移除
-    for (const id of [...selectedIds]) {
-      const ac = lastAircraft.find((a) => a.icao24 === id);
-      if (ac && hiddenCats.has(categoryOf(ac))) removeCallout('ac:' + id);
-    }
+try {
+  const raw = localStorage.getItem(HIDDEN_CATS_KEY);
+  if (raw) for (const c of JSON.parse(raw) as string[]) hiddenCats.add(c);
+} catch {
+  /* ignore */
+}
+
+/** 依据配色模式渲染图例分类（点击隐藏/显示该类）。 */
+function renderLegend(): void {
+  legendCatsEl.innerHTML = categoriesOf(colorMode)
+    .map(
+      (d) =>
+        `<button type="button" class="legend-item${hiddenCats.has(d.key) ? ' off' : ''}" data-cat="${esc(d.key)}">` +
+        `<i style="background:${d.color}"></i>${esc(d.label)}</button>`,
+    )
+    .join('');
+  legendCatsEl.querySelectorAll<HTMLButtonElement>('button.legend-item[data-cat]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleCat(btn.getAttribute('data-cat') ?? ''));
   });
+}
+
+function toggleCat(cat: string): void {
+  if (!cat) return;
+  if (hiddenCats.has(cat)) hiddenCats.delete(cat);
+  else hiddenCats.add(cat);
+  const btn = legendCatsEl.querySelector<HTMLButtonElement>(`button.legend-item[data-cat="${cat}"]`);
+  btn?.classList.toggle('off', hiddenCats.has(cat));
+  aircraftLayer.setHiddenCategories(hiddenCats);
+  writePref(HIDDEN_CATS_KEY, JSON.stringify([...hiddenCats]));
+  // 选中的飞机若被过滤掉，连同标注/航迹一起移除
+  for (const id of [...selectedIds]) {
+    const ac = lastAircraft.find((a) => a.icao24 === id);
+    if (ac && hiddenCats.has(categoryOf(ac, colorMode))) removeCallout('ac:' + id);
+  }
+}
+
+// 配色模式
+colorModeSelect.value = colorMode;
+aircraftLayer.setColorMode(colorMode);
+renderLegend();
+colorModeSelect.addEventListener('change', () => {
+  colorMode = colorModeSelect.value as ColorMode;
+  writePref(PREF_COLOR_MODE, colorMode);
+  aircraftLayer.setColorMode(colorMode);
+  renderLegend();
 });
+if (hiddenCats.size) aircraftLayer.setHiddenCategories(hiddenCats);
+
+// 低缩放聚合
+{
+  const enabled = readPref(PREF_CLUSTER) === '1';
+  clusterToggleEl.checked = enabled;
+  aircraftLayer.setCluster(enabled);
+  clusterToggleEl.addEventListener('change', () => {
+    writePref(PREF_CLUSTER, clusterToggleEl.checked ? '1' : '0');
+    aircraftLayer.setCluster(clusterToggleEl.checked);
+  });
+}
+
+// 自动更新（仅桌面版；通过 preload 暴露的桥通知主进程）
+{
+  const bridge = (globalThis as { __FLIGHTRADAR__?: { electron?: boolean; setAutoUpdate?: (v: boolean) => void } })
+    .__FLIGHTRADAR__;
+  if (!bridge?.electron) {
+    autoUpdateRowEl.classList.add('hidden');
+  } else {
+    const enabled = readPref(PREF_AUTOUPDATE) !== '0';
+    autoUpdateToggleEl.checked = enabled;
+    bridge.setAutoUpdate?.(enabled);
+    autoUpdateToggleEl.addEventListener('change', () => {
+      writePref(PREF_AUTOUPDATE, autoUpdateToggleEl.checked ? '1' : '0');
+      bridge.setAutoUpdate?.(autoUpdateToggleEl.checked);
+    });
+  }
+}
+
+// ── 叠加图层开关（设置面板与图例联动，持久化） ──
+interface LayerToggle {
+  /** 设置面板 checkbox id。 */
+  id: string;
+  /** 图例按钮 data-layer（无则仅设置面板可切）。 */
+  legend?: string;
+  key: string;
+  apply: (v: boolean) => void;
+  /** 同组互斥（如航图三选一）：开启一个自动关闭其余。 */
+  exclusive?: string;
+  /** 首次使用（无存储）时的默认状态，默认 true。 */
+  defaultOn?: boolean;
+}
+const LAYER_TOGGLES: LayerToggle[] = [
+  { id: 'lyr-airports', legend: 'airport', key: 'fr-lyr-airports', apply: (v) => aviationLayer.setAirportsVisible(v) },
+  { id: 'lyr-rpp', key: 'fr-lyr-rpp', apply: (v) => reportingPointLayer.setVisible(v) },
+  { id: 'lyr-fixes', key: 'fr-lyr-fixes', apply: (v) => waypointLayer.setVisible(v) },
+  { id: 'lyr-sid', key: 'fr-lyr-sid', apply: (v) => procedureLayer.setShowSid(v) },
+  { id: 'lyr-star', key: 'fr-lyr-star', apply: (v) => procedureLayer.setShowStar(v) },
+  { id: 'lyr-runways', legend: 'runway', key: 'fr-lyr-runways', apply: (v) => runwayOverlay.setVisible(v) },
+  {
+    id: 'lyr-airspace-all',
+    legend: 'airspace-all',
+    key: 'fr-lyr-airspace-all',
+    apply: (v) => {
+      airspaceLayer.setVisible(v);
+      firLayer.setMainVisible(v);
+      firLayer.setSectorsVisible(v);
+    },
+  },
+  { id: 'lyr-chart-vfr', legend: 'chart-vfr', key: 'fr-lyr-chart-vfr', exclusive: 'chart', defaultOn: false, apply: (v) => chartLayer.setChartVisible('vfr', v) },
+  { id: 'lyr-chart-lo', legend: 'chart-lo', key: 'fr-lyr-chart-lo', exclusive: 'chart', defaultOn: false, apply: (v) => chartLayer.setChartVisible('lo', v) },
+  { id: 'lyr-chart-hi', legend: 'chart-hi', key: 'fr-lyr-chart-hi', exclusive: 'chart', defaultOn: false, apply: (v) => chartLayer.setChartVisible('hi', v) },
+];
+const legendLayersEl = document.getElementById('legend');
+
+/** 应用某个图层开关：同步设置面板 checkbox、图例按钮、图层与持久化。 */
+function applyLayerToggle(t: LayerToggle, on: boolean, persist = true): void {
+  if (on && t.exclusive) {
+    for (const other of LAYER_TOGGLES) {
+      if (other !== t && other.exclusive === t.exclusive) applyLayerToggle(other, false);
+    }
+  }
+  t.apply(on);
+  if (persist) writePref(t.key, on ? '1' : '0');
+  const el = document.getElementById(t.id) as HTMLInputElement | null;
+  if (el) el.checked = on;
+  if (t.legend) {
+    legendLayersEl?.querySelector(`button.legend-item[data-layer="${t.legend}"]`)?.classList.toggle('off', !on);
+  }
+  if (persist) refreshOverlay();
+}
+
+for (const t of LAYER_TOGGLES) {
+  const stored = readPref(t.key);
+  const on = stored === null ? t.defaultOn !== false : stored === '1';
+  applyLayerToggle(t, on, false);
+  const el = document.getElementById(t.id) as HTMLInputElement | null;
+  el?.addEventListener('change', () => applyLayerToggle(t, el.checked));
+  if (t.legend) {
+    const btn = legendLayersEl?.querySelector<HTMLButtonElement>(`button.legend-item[data-layer="${t.legend}"]`);
+    btn?.addEventListener('click', () => applyLayerToggle(t, btn.classList.contains('off')));
+  }
+}
 
 function renderProviders(settings: SettingsResponse): void {
   providerSelect.innerHTML = settings.providers
@@ -1517,3 +1823,13 @@ getSettings()
 
 connect();
 refreshOverlay();
+
+// 开发期调试钩子（生产构建会被剔除）
+if (import.meta.env.DEV) {
+  (window as unknown as { __frDebug?: unknown }).__frDebug = {
+    map,
+    aircraft: () => lastAircraft,
+    following: () => followId,
+    hidden: () => [...hiddenCats],
+  };
+}

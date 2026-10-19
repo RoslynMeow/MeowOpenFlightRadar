@@ -16,3 +16,11 @@ packages/server/data/aircraft-db.json
 # generated airspace data (run `npm run import:airspace`)
 packages/server/data/airspace/
 packages/server/data/fir.geojson
+
+# generated openAIP reporting points (run `npm run import:rpp`)
+packages/server/data/reporting-points.json
+
+# generated FAA CIFP data (run `npm run import:cifp`)
+packages/server/data/cifp-fixes.json
+packages/server/data/cifp-procedures.json
+packages/server/data/cifp-meta.json

@@ -204,6 +204,12 @@ body {
   white-space: nowrap;
 }
 
+/* 搜索结果里的“实时飞机”行 */
+.sr-item .sr-ico {
+  color: var(--accent);
+  font-size: 12px;
+}
+
 .sr-empty {
   padding: 8px;
   color: var(--muted);
@@ -1029,6 +1035,30 @@ body {
   color: var(--text);
 }
 
+/* 跟随按钮：仅飞机标注显示（点 ⌖ 让镜头持续跟随该机） */
+.callout-follow {
+  display: none;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.callout-box[data-kind='aircraft'] .callout-follow {
+  display: inline-block;
+}
+
+.callout-follow:hover {
+  color: var(--text);
+}
+
+.callout-follow.on {
+  color: #ffd166;
+}
+
 /* 右下角缩放手柄 */
 .callout-resize {
   position: absolute;
@@ -1155,6 +1185,10 @@ body {
   align-items: center;
   gap: 5px;
   white-space: nowrap;
+}
+
+.legend-item.wide {
+  grid-column: 1 / -1;
 }
 
 button.legend-item {
@@ -1304,6 +1338,48 @@ button.legend-item:hover {
   color: var(--text);
   font-size: 13px;
   cursor: pointer;
+}
+
+/* 设置项行（开关 / 下拉） */
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 9px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.set-row.hidden {
+  display: none;
+}
+
+.set-row select {
+  width: auto;
+  min-width: 140px;
+  margin-top: 0;
+}
+
+.set-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.set-hint {
+  margin-left: 8px;
+  font-size: 11px;
+  font-style: normal;
+  color: #8b949e;
+}
+
+.set-row .set-hint {
+  margin-left: 8px;
+  font-size: 11px;
+  font-style: normal;
+  color: var(--text-dim, #8b949e);
 }
 
 #provider-note {
