@@ -3,7 +3,7 @@
 # FlightRadar
 
 **基于 [MeowTileKit](https://github.com/RoslynMeow/MeowTileKit) 的全球航班追踪地图**
-实时飞机 · 全球机场 / 跑道 / 导航台 / 空域 / 情报区叠加 · 桌面版（Electron）+ 浏览器版
+实时飞机 · 全球机场 / 跑道 / 导航台 / 空域 / 情报区 / 管制扇区叠加 · 桌面版（Electron）+ 浏览器版
 
 [![build](https://github.com/RoslynMeow/MeowOpenFlightRadar/actions/workflows/build-release.yml/badge.svg)](https://github.com/RoslynMeow/MeowOpenFlightRadar/actions/workflows/build-release.yml)
 [![release](https://img.shields.io/github/v/release/RoslynMeow/MeowOpenFlightRadar?sort=semver&display_name=release)](https://github.com/RoslynMeow/MeowOpenFlightRadar/releases/latest)
@@ -34,8 +34,10 @@
 - **实时飞机** — SSE 稳定长连接推流，在上报位置之间逐帧插值平滑移动（**默认不预测**，仅当数据源明确 `predictable` 时才有限外推）；图标按机型、颜色按高度着色；跨日期变更线连续显示。
 - **跟随标注** — 点击飞机 / 跑道 / 管制分区 / 情报区，在旁边弹出信息框并用引线指向目标，随地图与目标移动；可多选、可拖动、可缩放、可单独关闭。
 - **多航迹** — 每架选中的飞机各画一条航迹。
-- **航空叠加** — 机场 / 跑道 / 导航台（OurAirports）、空域（openAIP）、FIR/UIR 情报区（VATSIM/VATSpy），全部 Canvas 渲染。
-- **机场面板**（底部可拖动，可折叠，占视口 20%）—— 航班板分四列、各自独立滚动，并在「在途 / 离港」列按**当前时间**画一条随时间为移动的分割线；点击某航班即把视角移到该机并选中，相关飞机在图上高亮并显示航迹。
+- **航空叠加** — 机场 / 跑道 / 导航台（OurAirports）、空域（openAIP）、FIR/UIR 情报区与管制扇区（VATSIM/VATSpy），全部 Canvas 渲染。
+- **图层开关** — 机场 / 报告点 / IFR 航路点 / SID / STAR / 跑道 可单独开关；**空域 / 情报区 / 管制扇区** 合并为一个开关；**导航台（VOR/DME）与 NDB** 仅在打开机场预览时自动显示、其余时段隐藏（设置面板 + 图例联动，状态记忆）。
+- **航路点与进离场程序** — 美国 IFR 航路点（FAA CIFP ARINC 424）与全球 VFR 报告点（openAIP）；选中机场时按需叠加其 **SID / STAR** 折线，SID、STAR 可分别开关。
+- **机场面板**（底部可拖动，可折叠，占视口 20%）—— 航班板分四列、各自独立滚动，并在「在途 / 离港」列按**当前时间**画一条随时间为移动的分割线；点击某航班即把视角移到该机并选中，相关飞机在图上高亮并显示航迹；打开机场预览时自动叠加周边**导航台 / NDB**。
 - **机场天气** — 机场上叠加**风玫瑰**罗盘，颜色对应当前飞行条件（VFR 绿 / MVFR 蓝 / IFR 红 / LIFR 品红）；旁边悬浮框显示机场信息 + METAR / TAF 原文。
 - **底部搜索** — 居中搜索框 + 可点击结果，选中后定位并打开机场面板。
 - **多底图切换** — Esri（默认）/ OSM / 高德卫星。
@@ -50,6 +52,8 @@
 | 实时飞机 | FlightAware（网页抓取，实验性） | 非官方，仅供试用 |
 | 机场 / 跑道 / 导航台 | [OurAirports](https://ourairports.com/data/) | 公有领域 |
 | 空域 | [openAIP](https://www.openaip.net) | CC BY-NC 4.0 |
+| VFR 报告点（VRP） | [openAIP](https://www.openaip.net) | CC BY-NC 4.0 |
+| IFR 航路点 / SID / STAR（美国） | [FAA CIFP](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/cifp/)（ARINC 424） | 公有领域 |
 | FIR/UIR 情报区 | [VATSIM / VATSpy](https://github.com/vatsimnetwork/vatspy-data-project) | CC-BY-SA-4.0 |
 | 机场天气 METAR/TAF | [aviationweather.gov](https://aviationweather.gov) | 公有领域 |
 
@@ -79,7 +83,7 @@ npm run install:chromium   # 仅独立 server 需要：下载 Playwright Chromiu
 npm run dev                # 自动准备数据后启动 API + 前端（同一进程）
 ```
 
-打开 http://localhost:5173 ，拖动地图，飞机位置按可视范围自动刷新。
+打开 <http://localhost:5173> ，拖动地图，飞机位置按可视范围自动刷新。
 
 **桌面版开发 / 打包：**
 
@@ -92,7 +96,7 @@ npm run dist:win     # Windows 便携版（release/）
 npm run dist:dir     # 免打包，仅生成解包目录
 ```
 
-> `dev` / `build` / `start` 前会自动运行 `setup:data`，**只导入缺失的数据**（机场/导航台、空域、情报区），已存在则跳过；强制刷新删掉 `packages/server/data/` 下对应文件，或用 `npm run import:*`。
+> `dev` / `build` / `start` 前会自动运行 `setup:data`，**只导入缺失的数据**（机场/导航台、空域、报告点、情报区、FAA CIFP 航路点/程序），已存在则跳过；强制刷新删掉 `packages/server/data/` 下对应文件，或用 `npm run import:*`（`import:airports` / `import:airspace` / `import:rpp` / `import:fir` / `import:cifp`）。
 
 ---
 
@@ -122,11 +126,14 @@ npm run dist:dir     # 免打包，仅生成解包目录
 | GET | `/api/airports?q=pek` | 机场搜索 |
 | GET | `/api/airports?bbox=...` | 视野内机场 |
 | GET | `/api/navaids?bbox=...` | 视野内导航台（VOR/DME/NDB） |
+| GET | `/api/reporting-points?bbox=...` | 视野内 VFR 报告点（openAIP） |
+| GET | `/api/waypoints?bbox=...` | 视野内 IFR 航路点（FAA CIFP，美国） |
 | GET | `/api/airspace?bbox=...` | 视野内空域（openAIP GeoJSON） |
 | GET | `/api/fir?bbox=...` | 视野内 FIR/UIR 边界 |
 | GET | `/api/runways?bbox=...` | 视野内跑道（GeoJSON LineString） |
 | GET | `/api/airports/:ident` | 机场详情（含跑道） |
 | GET | `/api/airports/:ident/runways.geojson` | 跑道 GeoJSON |
+| GET | `/api/airports/:ident/procedures` | 机场 SID/STAR 程序（GeoJSON，FAA CIFP） |
 | GET | `/api/airports/:ident/flights` | 机场航班板（到达/出发/在途/计划，60s 缓存） |
 | GET | `/api/weather/:ident` | 机场 METAR / TAF（5min 缓存） |
 | GET | `/api/notam?q=<FIR/机场/空域>` | 分区 NOTAM（需 `SKYLINK_API_KEY`） |
@@ -168,8 +175,10 @@ npm run dist:dir     # 免打包，仅生成解包目录
 - [x] 全球 FIR/UIR 情报区边界（VATSIM/VATSpy）
 - [x] FlightAware 数据源 + 设置面板
 - [x] Electron 桌面版（Windows 便携版自动发布）
-- [ ] SID/STAR 进离场程序（FAA CIFP + d-TPP 航图）
-- [ ] 美国航路（airways/fixes，FAA NASR）
+- [x] 图层开关（机场/报告点/航路点/SID/STAR/跑道 独立；空域/情报区/管制扇区 合并；导航台/NDB 随机场预览联动）
+- [x] VFR 报告点（openAIP，57 国）
+- [x] 美国 IFR 航路点 + SID/STAR 进离场程序（FAA CIFP，选中机场按需叠加）
+- [ ] SID/STAR 全球覆盖（open flightmaps：欧洲/澳洲等）+ 航路（airways）
 - [ ] 自建全球观测走廊（聚合 ADS-B 轨迹）
 - [ ] 自建 FAA 航图瓦片（GeoTIFF + GDAL，脱离 Esri）
 

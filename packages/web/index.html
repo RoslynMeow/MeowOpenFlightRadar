@@ -71,11 +71,15 @@
       </button>
       <div class="legend-body">
         <div class="legend-group" id="legend-cats"></div>
-        <div class="legend-group">
-          <span class="legend-item"><i style="background:#ff5d8f"></i>跑道</span>
-          <span class="legend-item"><i style="background:#4fc3f7"></i>机场</span>
-          <span class="legend-item"><i style="background:#c792ea"></i>VOR/DME</span>
-          <span class="legend-item"><i style="background:#f0a020"></i>NDB</span>
+        <div class="legend-group" id="legend-layers">
+          <button type="button" class="legend-item" data-layer="runway"><i style="background:#ff5d8f"></i>跑道</button>
+          <button type="button" class="legend-item" data-layer="airport"><i style="background:#4fc3f7"></i>机场</button>
+          <button type="button" class="legend-item wide" data-layer="airspace-all"><i style="background:#8b949e"></i>空域 / 情报区 / 管制扇区</button>
+        </div>
+        <div class="legend-group" id="legend-charts">
+          <button type="button" class="legend-item" data-layer="chart-vfr"><i style="background:#7fd16a"></i>World VFR</button>
+          <button type="button" class="legend-item" data-layer="chart-lo"><i style="background:#58a6ff"></i>World Lo</button>
+          <button type="button" class="legend-item" data-layer="chart-hi"><i style="background:#bc8cff"></i>World Hi</button>
         </div>
       </div>
       <div class="legend-status"><span id="status" class="status">连接中…</span></div>
@@ -108,6 +112,17 @@
         </label>
         <label class="set-row"><span>低缩放聚合</span><input type="checkbox" id="cluster-toggle" /></label>
         <label class="set-row" id="autoupdate-row"><span>自动更新（桌面版）</span><input type="checkbox" id="autoupdate-toggle" /></label>
+        <div class="title" style="margin-top:10px">叠加图层</div>
+        <label class="set-row"><span>机场</span><input type="checkbox" id="lyr-airports" /></label>
+        <label class="set-row"><span>报告点 (VRP)</span><input type="checkbox" id="lyr-rpp" /></label>
+        <label class="set-row"><span>IFR 航路点 (US)</span><input type="checkbox" id="lyr-fixes" /></label>
+        <label class="set-row"><span>SID 离场程序</span><input type="checkbox" id="lyr-sid" /></label>
+        <label class="set-row"><span>STAR 进场程序</span><input type="checkbox" id="lyr-star" /></label>
+        <label class="set-row"><span>跑道</span><input type="checkbox" id="lyr-runways" /></label>
+        <label class="set-row"><span>空域 / 情报区 / 管制扇区</span><input type="checkbox" id="lyr-airspace-all" /></label>
+        <label class="set-row"><span>SkyVector World VFR<em class="set-hint">仅供个人测试</em></span><input type="checkbox" id="lyr-chart-vfr" /></label>
+        <label class="set-row"><span>SkyVector World Lo<em class="set-hint">z3–z8 原生</em></span><input type="checkbox" id="lyr-chart-lo" /></label>
+        <label class="set-row"><span>SkyVector World Hi<em class="set-hint">互斥，三选一</em></span><input type="checkbox" id="lyr-chart-hi" /></label>
       </div>
     </div>
 

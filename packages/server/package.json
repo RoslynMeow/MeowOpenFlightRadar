@@ -9,7 +9,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "import:airports": "node scripts/import-airports.mjs",
     "import:airspace": "cross-env NODE_USE_ENV_PROXY=1 node scripts/import-airspace.mjs",
+    "import:rpp": "cross-env NODE_USE_ENV_PROXY=1 node scripts/import-reporting-points.mjs",
     "import:fir": "cross-env NODE_USE_ENV_PROXY=1 node scripts/import-fir.mjs",
+    "import:cifp": "cross-env NODE_USE_ENV_PROXY=1 node scripts/import-cifp.mjs",
     "install:chromium": "playwright-core install chromium"
   },
   "dependencies": {

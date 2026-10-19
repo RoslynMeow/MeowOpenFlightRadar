@@ -7,7 +7,8 @@ import { copyOffsets } from '../wrap';
 
 /**
  * FIR/UIR 情报区边界（VATSIM / VATSpy，CC-BY-SA-4.0）。
- * 虚线轮廓 + 主情报区名称标签（子扇区仅悬停显示）。点击命中由外部统一点击处理通过 pickLatLng 完成。
+ * 虚线轮廓 + 主情报区名称标签；子扇区（id 含 '-'）可单独开关、淡色虚线。
+ * 点击命中由外部统一点击处理通过 pickLatLng 完成。
  */
 export class FirLayer {
   private readonly app: MeowMap;
@@ -19,6 +20,8 @@ export class FirLayer {
   private features: Feature[] = [];
   private reqId = 0;
   private lastBbox = '';
+  private showMain = true;
+  private showSectors = true;
 
   constructor(app: MeowMap) {
     this.app = app;
@@ -27,16 +30,43 @@ export class FirLayer {
     this.group = L.layerGroup().addTo(this.map);
   }
 
+  /** 主情报区边界（FIR/UIR）显示开关。 */
+  setMainVisible(v: boolean): void {
+    if (v === this.showMain) return;
+    this.showMain = v;
+    this.applyAttach();
+    this.invalidate();
+  }
+
+  /** 子扇区边界显示开关。 */
+  setSectorsVisible(v: boolean): void {
+    if (v === this.showSectors) return;
+    this.showSectors = v;
+    this.applyAttach();
+    this.invalidate();
+  }
+
+  private applyAttach(): void {
+    if (this.showMain || this.showSectors) this.group.addTo(this.map);
+    else this.map.removeLayer(this.group);
+  }
+
+  isVisible(): boolean {
+    return this.showMain || this.showSectors;
+  }
+
   invalidate(): void {
     this.lastBbox = '';
   }
 
   /** 命中测试：返回包含该 WGS-84 点的情报区属性（子扇区优先）。 */
   pickLatLng(lat: number, lon: number): Record<string, unknown> | null {
+    if (!this.isVisible()) return null;
     let best: Record<string, unknown> | null = null;
     let bestArea = Infinity;
     for (const f of this.features) {
       if (!f.geometry) continue;
+      if (!this.visibleKind(f)) continue;
       if (!pointInGeometry(lon, lat, f.geometry)) continue;
       const area = 'coordinates' in f.geometry ? bboxArea(f.geometry.coordinates as unknown) : Infinity;
       if (area < bestArea) {
@@ -47,8 +77,14 @@ export class FirLayer {
     return best;
   }
 
+  /** 该要素是否属于当前可见类别。 */
+  private visibleKind(f: Feature): boolean {
+    const fid = String((f.properties ?? {}).id ?? '');
+    return fid.includes('-') ? this.showSectors : this.showMain;
+  }
+
   async refresh(bbox: string): Promise<void> {
-    if (bbox === this.lastBbox) return;
+    if (!this.isVisible() || bbox === this.lastBbox) return;
     const id = ++this.reqId;
     let data: FeatureCollection;
     try {
@@ -72,7 +108,13 @@ export class FirLayer {
           const p = this.app.toLocal(coords[1], coords[0] + off);
           return L.latLng(p.lat, p.lng);
         },
-        style: { color: '#f0c674', weight: 1, opacity: 0.7, dashArray: '4 4', fill: false },
+        filter: (f) => this.visibleKind(f as Feature),
+        style: (f) => {
+          const fid = String(((f as Feature | undefined)?.properties ?? {}).id ?? '');
+          return fid.includes('-')
+            ? { color: '#f0c674', weight: 1, opacity: 0.4, dashArray: '2 6', fill: false }
+            : { color: '#f0c674', weight: 1, opacity: 0.7, dashArray: '4 4', fill: false };
+        },
         onEachFeature: (f, l) => {
           const p = (f.properties ?? {}) as Record<string, unknown>;
           const extra = [p.region, p.division].filter(Boolean).join(' / ');
@@ -85,7 +127,7 @@ export class FirLayer {
 
     // 主情报区（id 不含 '-'）加名称标签
     this.labels = L.layerGroup();
-    if (this.map.getZoom() >= 4) {
+    if (this.map.getZoom() >= 4 && this.showMain) {
       for (const off of copyOffsets(this.map)) {
         for (const f of data.features) {
           const p = (f.properties ?? {}) as Record<string, unknown>;

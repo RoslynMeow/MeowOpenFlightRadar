@@ -73,6 +73,7 @@ export class RunwayOverlay {
   private features: Feature[] = [];
   private reqId = 0;
   private lastBbox = '';
+  private enabled = true;
 
   constructor(app: MeowMap) {
     this.app = app;
@@ -81,17 +82,30 @@ export class RunwayOverlay {
     this.group = L.layerGroup().addTo(this.map);
   }
 
+  /** 显示/隐藏跑道层（关闭时跳过网络请求并清空图层）。 */
+  setVisible(v: boolean): void {
+    if (v === this.enabled) return;
+    this.enabled = v;
+    if (v) this.group.addTo(this.map);
+    else this.map.removeLayer(this.group);
+  }
+
+  isVisible(): boolean {
+    return this.enabled;
+  }
+
   invalidate(): void {
     this.lastBbox = '';
   }
 
   /** 命中视野内最近的跑道（属性）；无则 null。 */
   pick(cp: L.Point, threshold = 7): Record<string, unknown> | null {
+    if (!this.enabled) return null;
     return pickRunway(this.features, this.app, this.map, cp, threshold);
   }
 
   async refresh(bbox: string): Promise<void> {
-    if (bbox === this.lastBbox) return;
+    if (!this.enabled || bbox === this.lastBbox) return;
     if (this.map.getZoom() < 8) {
       for (const l of this.layers) this.group.removeLayer(l);
       this.layers = [];

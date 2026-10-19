@@ -1187,6 +1187,10 @@ body {
   white-space: nowrap;
 }
 
+.legend-item.wide {
+  grid-column: 1 / -1;
+}
+
 button.legend-item {
   padding: 0;
   border: 0;
@@ -1362,6 +1366,20 @@ button.legend-item:hover {
   height: 16px;
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+.set-hint {
+  margin-left: 8px;
+  font-size: 11px;
+  font-style: normal;
+  color: #8b949e;
+}
+
+.set-row .set-hint {
+  margin-left: 8px;
+  font-size: 11px;
+  font-style: normal;
+  color: var(--text-dim, #8b949e);
 }
 
 #provider-note {

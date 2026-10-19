@@ -1,4 +1,4 @@
-import type { AircraftResult, Airport, AirportInfoResult, Navaid, NotamResult, TrackResult, Weather } from '@flightradar/shared';
+import type { AircraftResult, Airport, AirportInfoResult, IfrFix, Navaid, NotamResult, ReportingPoint, TrackResult, Weather } from '@flightradar/shared';
 import type { FeatureCollection } from 'geojson';
 
 // Electron 通过 preload 注入 __FLIGHTRADAR__.apiBase；开发/浏览器下用 VITE_API_BASE 或同源。
@@ -81,6 +81,27 @@ export async function fetchNavaidsInBBox(bbox: string): Promise<Navaid[]> {
   return ((await res.json()) as { items: Navaid[] }).items;
 }
 
+/** 视野内的报告点 / VRP（openAIP，用于地图叠加）。 */
+export async function fetchReportingPointsInBBox(bbox: string): Promise<ReportingPoint[]> {
+  const res = await fetch(`${BASE}/api/reporting-points?bbox=${bbox}`);
+  if (!res.ok) throw new Error(`reporting-points HTTP ${res.status}`);
+  return ((await res.json()) as { items: ReportingPoint[] }).items;
+}
+
+/** 视野内的 IFR 航路点（FAA CIFP）。 */
+export async function fetchIfrFixesInBBox(bbox: string): Promise<IfrFix[]> {
+  const res = await fetch(`${BASE}/api/waypoints?bbox=${bbox}`);
+  if (!res.ok) throw new Error(`waypoints HTTP ${res.status}`);
+  return ((await res.json()) as { items: IfrFix[] }).items;
+}
+
+/** 某机场的 SID/STAR 进离场程序（GeoJSON 折线）。 */
+export async function getAirportProcedures(ident: string): Promise<FeatureCollection> {
+  const res = await fetch(`${BASE}/api/airports/${encodeURIComponent(ident)}/procedures`);
+  if (!res.ok) throw new Error(`procedures HTTP ${res.status}`);
+  return (await res.json()) as FeatureCollection;
+}
+
 /** 视野内的空域（openAIP，GeoJSON）。 */
 export async function fetchAirspace(bbox: string): Promise<FeatureCollection> {
   const res = await fetch(`${BASE}/api/airspace?bbox=${bbox}`);
@@ -102,8 +123,12 @@ export async function fetchFir(bbox: string): Promise<FeatureCollection> {
   return (await res.json()) as FeatureCollection;
 }
 
-export interface ProviderInfo {
-  id: string;
+/** SkyVector 原生瓦片地址（服务端代理；scale 为 SkyVector 缩放索引，网格非 2 的幂）。 */
+export function skyvectorRawUrl(protoid: number, scale: number, x: number, y: number): string {
+  return `${BASE}/api/skyvector/raw/${protoid}/${scale}/${x}/${y}.jpg`;
+}
+
+export interface ProviderInfo {  id: string;
   label: string;
   requiresKey: boolean;
   available: boolean;
