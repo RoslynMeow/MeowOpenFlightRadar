@@ -35,7 +35,7 @@
 - **跟随标注** — 点击飞机 / 跑道 / 管制分区 / 情报区，在旁边弹出信息框并用引线指向目标，随地图与目标移动；可多选、可拖动、可缩放、可单独关闭。
 - **多航迹** — 每架选中的飞机各画一条航迹。
 - **航空叠加** — 机场 / 跑道 / 导航台（OurAirports）、空域（openAIP）、FIR/UIR 情报区与管制扇区（VATSIM/VATSpy），全部 Canvas 渲染。
-- **图层开关** — 机场 / 报告点 / IFR 航路点 / SID / STAR / 跑道 可单独开关；**空域 / 情报区 / 管制扇区** 合并为一个开关；**导航台（VOR/DME）与 NDB** 仅在打开机场预览时自动显示、其余时段隐藏（设置面板 + 图例联动，状态记忆）。
+- **图层开关** — 机场（含跑道）/ 报告点 / IFR 航路点 / SID / STAR 可单独开关；**空域 / 情报区 / 管制扇区** 合并为一个「空域」开关；SkyVector World 航图改为设置面板下拉框；**导航台（VOR/DME）与 NDB** 仅在打开机场预览时自动显示、其余时段隐藏（设置面板 + 图例联动，状态记忆）。
 - **航路点与进离场程序** — 美国 IFR 航路点（FAA CIFP ARINC 424）与全球 VFR 报告点（openAIP）；选中机场时按需叠加其 **SID / STAR** 折线，SID、STAR 可分别开关。
 - **机场面板**（底部可拖动，可折叠，占视口 20%）—— 航班板分四列、各自独立滚动，并在「在途 / 离港」列按**当前时间**画一条随时间为移动的分割线；点击某航班即把视角移到该机并选中，相关飞机在图上高亮并显示航迹；打开机场预览时自动叠加周边**导航台 / NDB**。
 - **机场天气** — 机场上叠加**风玫瑰**罗盘，颜色对应当前飞行条件（VFR 绿 / MVFR 蓝 / IFR 红 / LIFR 品红）；旁边悬浮框显示机场信息 + METAR / TAF 原文。
@@ -49,7 +49,7 @@
 
 | 数据 | 来源 | 授权 |
 | --- | --- | --- |
-| 实时飞机 | FlightAware（网页抓取，实验性） | 非官方，仅供试用 |
+| 实时飞机 | FlightAware / FlightRadar24（网页抓取，实验性） | 非官方，仅供试用 |
 | 机场 / 跑道 / 导航台 | [OurAirports](https://ourairports.com/data/) | 公有领域 |
 | 空域 | [openAIP](https://www.openaip.net) | CC BY-NC 4.0 |
 | VFR 报告点（VRP） | [openAIP](https://www.openaip.net) | CC BY-NC 4.0 |
@@ -107,11 +107,12 @@ npm run dist:dir     # 免打包，仅生成解包目录
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `PORT` | `8787` | 服务端口 |
-| `AIRCRAFT_PROVIDER` | `flightaware` | 飞机数据源（当前仅 `flightaware`） |
+| `AIRCRAFT_PROVIDER` | `flightradar24` | 飞机数据源（`flightradar24` / `flightaware`） |
 | `POLL_INTERVAL_MS` | `2000` | 后台轮询上游间隔（毫秒） |
 | `CACHE_TTL_MS` | `4000` | REST 结果缓存时间（毫秒） |
 | `WEB_ORIGIN` | `*` | CORS 允许来源 |
 | `SKYLINK_API_KEY` | 空 | NOTAM 源 SkyLink 的 API key（空则 NOTAM 不可用） |
+| `FR24_API_TOKEN` | 空 | FlightRadar24 官方 API token；不填则使用免费网页接口（仅部分飞机） |
 
 若本机经代理访问外网，Node 的 `fetch` 默认不读 `HTTP(S)_PROXY`；server 脚本已用 `cross-env NODE_USE_ENV_PROXY=1` 启用 Node 内置代理支持（无代理时无副作用）。
 
@@ -166,6 +167,15 @@ npm run dist:dir     # 免打包，仅生成解包目录
 
 ---
 
+## FlightRadar24 抓取说明
+
+- 未配置 `FR24_API_TOKEN` 时，直接请求 `data-cloud.flightradar24.com/zones/fcgi/feed.js`，无需 key，也不需要无头浏览器；该免费接口只返回部分飞机。
+- 配置 `FR24_API_TOKEN` 后改用官方 `fr24api.flightradar24.com/api/live/flight-positions/full`，数据完整但会消耗 API credits。
+- 机场航班板与上游航迹暂不可用：机场面板会自动收起航班板区域、仅保留标题栏，航迹回退到服务端累计的位置缓冲。
+- **非官方网页接口，可能受地域限制或随时变更，风险自负，仅供本地试用。**
+
+---
+
 ## 路线图
 
 - [x] 飞机详情与历史航迹
@@ -174,8 +184,9 @@ npm run dist:dir     # 免打包，仅生成解包目录
 - [x] 全球空域叠加（openAIP）
 - [x] 全球 FIR/UIR 情报区边界（VATSIM/VATSpy）
 - [x] FlightAware 数据源 + 设置面板
+- [x] FlightRadar24 数据源（可在设置面板切换）
 - [x] Electron 桌面版（Windows 便携版自动发布）
-- [x] 图层开关（机场/报告点/航路点/SID/STAR/跑道 独立；空域/情报区/管制扇区 合并；导航台/NDB 随机场预览联动）
+- [x] 图层开关（机场含跑道/报告点/航路点/SID/STAR；空域/情报区/管制扇区 合并为「空域」；航图下拉框；导航台/NDB 随机场预览联动）
 - [x] VFR 报告点（openAIP，57 国）
 - [x] 美国 IFR 航路点 + SID/STAR 进离场程序（FAA CIFP，选中机场按需叠加）
 - [ ] SID/STAR 全球覆盖（open flightmaps：欧洲/澳洲等）+ 航路（airways）

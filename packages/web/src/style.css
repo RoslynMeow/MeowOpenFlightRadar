@@ -329,6 +329,19 @@ body {
   transform: rotate(180deg);
 }
 
+/* 数据源不提供航班板：只留标题栏 */
+.airport-dock.no-board {
+  height: auto;
+}
+
+.airport-dock.no-board .ad-body {
+  display: none;
+}
+
+.airport-dock.no-board #fb-collapse {
+  display: none;
+}
+
 /* 主体：航班板（左） | 右侧栏（机场信息+跑道） */
 .ad-body {
   display: flex;

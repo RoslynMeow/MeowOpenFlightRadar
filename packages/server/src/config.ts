@@ -9,12 +9,12 @@ function intEnv(name: string, fallback: number): number {
 
 const providerEnv = process.env.AIRCRAFT_PROVIDER;
 if (providerEnv && !isAircraftProvider(providerEnv)) {
-  console.warn(`[config] unknown AIRCRAFT_PROVIDER="${providerEnv}", falling back to "flightaware"`);
+  console.warn(`[config] unknown AIRCRAFT_PROVIDER="${providerEnv}", falling back to "flightradar24"`);
 }
 
 export const config = {
   port: intEnv('PORT', 8787),
-  provider: (isAircraftProvider(providerEnv) ? providerEnv : 'flightaware') as AircraftProvider,
+  provider: (isAircraftProvider(providerEnv) ? providerEnv : 'flightradar24') as AircraftProvider,
   pollIntervalMs: intEnv('POLL_INTERVAL_MS', 2000),
   cacheTtlMs: intEnv('CACHE_TTL_MS', 4000),
   webOrigin: process.env.WEB_ORIGIN ?? '*',
