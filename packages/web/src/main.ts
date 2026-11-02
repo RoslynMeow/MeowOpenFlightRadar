@@ -49,16 +49,24 @@ const weatherPane = map.createPane('weatherPane');
 weatherPane.style.zIndex = '350';
 
 // 数据来源署名：并入 Leaflet 版权控件（与底图 © Esri 写在一起，始终排在最后）
-const DATA_ATTRIBUTION =
-  '空域 © <a href="https://www.openaip.net" target="_blank" rel="noopener">openAIP</a> · ' +
-  '情报区 © <a href="https://github.com/vatsimnetwork/vatspy-data-project" target="_blank" rel="noopener">VATSIM/VATSpy</a> · ' +
-  '航图 © <a href="https://skyvector.com" target="_blank" rel="noopener">SkyVector</a>（Jeppesen，仅供个人测试） · ' +
-  '航班数据 © <a href="https://www.flightaware.com" target="_blank" rel="noopener">FlightAware</a>';
+const FLIGHT_DATA_ATTRIBUTION: Record<string, string> = {
+  flightaware:
+    '航班数据 © <a href="https://www.flightaware.com" target="_blank" rel="noopener">FlightAware</a>',
+  flightradar24:
+    '航班数据 © <a href="https://www.flightradar24.com" target="_blank" rel="noopener">FlightRadar24</a>',
+};
+let flightDataAttribution = FLIGHT_DATA_ATTRIBUTION.flightaware;
+let currentAttribution = '';
 function refreshAttribution(): void {
   const ctrl = map.attributionControl;
   if (!ctrl) return;
-  ctrl.removeAttribution(DATA_ATTRIBUTION);
-  ctrl.addAttribution(DATA_ATTRIBUTION);
+  if (currentAttribution) ctrl.removeAttribution(currentAttribution);
+  currentAttribution =
+    '空域 © <a href="https://www.openaip.net" target="_blank" rel="noopener">openAIP</a> · ' +
+    '情报区 © <a href="https://github.com/vatsimnetwork/vatspy-data-project" target="_blank" rel="noopener">VATSIM/VATSpy</a> · ' +
+    '航图 © <a href="https://skyvector.com" target="_blank" rel="noopener">SkyVector</a>（Jeppesen，仅供个人测试） · ' +
+    flightDataAttribution;
+  ctrl.addAttribution(currentAttribution);
 }
 refreshAttribution();
 
@@ -66,6 +74,7 @@ const statusEl = document.getElementById('status')!;
 const searchEl = document.getElementById('airport-search') as HTMLInputElement;
 const searchResultsEl = document.getElementById('search-results')!;
 const sourceEl = document.getElementById('source-select') as HTMLSelectElement;
+const chartSelectEl = document.getElementById('chart-select') as HTMLSelectElement;
 const settingsBtn = document.getElementById('settings-btn') as HTMLButtonElement;
 const settingsModalEl = document.getElementById('settings-modal')!;
 const settingsCloseEl = document.getElementById('settings-close') as HTMLButtonElement;
@@ -1089,11 +1098,29 @@ function updateHighlight(): void {
   aircraftLayer.setVisibleIds(relatedAirport && set.size > 0 ? visible : null);
 }
 
+let currentProviderSupportsBoard = true;
+
+function setFlightBoardAvailable(available: boolean): void {
+  currentProviderSupportsBoard = available;
+  airportDockEl.classList.toggle('no-board', !available);
+  if (!available) {
+    lastFlightRes = null;
+    airportTzOffsetMin = null;
+    fbBodyEl.innerHTML = '';
+    airportDockEl.classList.remove('collapsed');
+  }
+}
+
 async function loadAirportFlights(ident: string): Promise<void> {
   relatedIdents.clear();
   updateHighlight();
-  fbBodyEl.innerHTML = '<div class="fa-note">加载 FlightAware 航班板…</div>';
   airportDockEl.classList.remove('hidden');
+  if (!currentProviderSupportsBoard) {
+    setFlightBoardAvailable(false);
+    return;
+  }
+  setFlightBoardAvailable(true);
+  fbBodyEl.innerHTML = '<div class="fa-note">加载机场航班板…</div>';
   try {
     const res = await getAirportFlights(ident);
     if (relatedAirport !== ident) return; // 已切换到其它机场
@@ -1101,7 +1128,12 @@ async function loadAirportFlights(ident: string): Promise<void> {
     updateHighlight();
   } catch (e) {
     if (relatedAirport !== ident) return;
-    fbBodyEl.innerHTML = `<div class="fa-note fa-err">航班板加载失败：${esc(e instanceof Error ? e.message : e)}</div>`;
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('501')) {
+      setFlightBoardAvailable(false);
+      return;
+    }
+    fbBodyEl.innerHTML = `<div class="fa-note fa-err">航班板加载失败：${esc(msg)}</div>`;
   }
 }
 
@@ -1289,7 +1321,7 @@ function renderFlightBoard(res: AirportInfoResult): void {
     .filter((b) => b.flights.length)
     .sort((a, b) => boardRank(a.type) - boardRank(b.type));
   if (!boards.length) {
-    fbBodyEl.innerHTML = '<div class="fa-note">FlightAware 暂无该机场航班板</div>';
+    fbBodyEl.innerHTML = '<div class="fa-note">当前数据源暂无该机场航班板</div>';
     return;
   }
   fbBodyEl.innerHTML = boards.map(renderBoardColumn).join('');
@@ -1589,6 +1621,21 @@ app.on('sourcechange', () => {
   refreshAttribution();
 });
 
+// ── 航图切换 ──
+const CHART_KEY = 'fra-chart-kind';
+function applyChartKind(kind: string): void {
+  chartLayer.hideAll();
+  if (kind === 'vfr' || kind === 'lo' || kind === 'hi') chartLayer.setChartVisible(kind, true);
+}
+const savedChart = readPref(CHART_KEY);
+const initialChart = savedChart === 'vfr' || savedChart === 'lo' || savedChart === 'hi' ? savedChart : 'none';
+chartSelectEl.value = initialChart;
+applyChartKind(initialChart);
+chartSelectEl.addEventListener('change', () => {
+  applyChartKind(chartSelectEl.value);
+  writePref(CHART_KEY, chartSelectEl.value);
+});
+
 // ── 设置模态框 ──
 function openSettings(): void {
   settingsModalEl.classList.remove('hidden');
@@ -1734,18 +1781,23 @@ interface LayerToggle {
   legend?: string;
   key: string;
   apply: (v: boolean) => void;
-  /** 同组互斥（如航图三选一）：开启一个自动关闭其余。 */
-  exclusive?: string;
   /** 首次使用（无存储）时的默认状态，默认 true。 */
   defaultOn?: boolean;
 }
 const LAYER_TOGGLES: LayerToggle[] = [
-  { id: 'lyr-airports', legend: 'airport', key: 'fr-lyr-airports', apply: (v) => aviationLayer.setAirportsVisible(v) },
+  {
+    id: 'lyr-airports',
+    legend: 'airport',
+    key: 'fr-lyr-airports',
+    apply: (v) => {
+      aviationLayer.setAirportsVisible(v);
+      runwayOverlay.setVisible(v);
+    },
+  },
   { id: 'lyr-rpp', key: 'fr-lyr-rpp', apply: (v) => reportingPointLayer.setVisible(v) },
   { id: 'lyr-fixes', key: 'fr-lyr-fixes', apply: (v) => waypointLayer.setVisible(v) },
   { id: 'lyr-sid', key: 'fr-lyr-sid', apply: (v) => procedureLayer.setShowSid(v) },
   { id: 'lyr-star', key: 'fr-lyr-star', apply: (v) => procedureLayer.setShowStar(v) },
-  { id: 'lyr-runways', legend: 'runway', key: 'fr-lyr-runways', apply: (v) => runwayOverlay.setVisible(v) },
   {
     id: 'lyr-airspace-all',
     legend: 'airspace-all',
@@ -1756,19 +1808,11 @@ const LAYER_TOGGLES: LayerToggle[] = [
       firLayer.setSectorsVisible(v);
     },
   },
-  { id: 'lyr-chart-vfr', legend: 'chart-vfr', key: 'fr-lyr-chart-vfr', exclusive: 'chart', defaultOn: false, apply: (v) => chartLayer.setChartVisible('vfr', v) },
-  { id: 'lyr-chart-lo', legend: 'chart-lo', key: 'fr-lyr-chart-lo', exclusive: 'chart', defaultOn: false, apply: (v) => chartLayer.setChartVisible('lo', v) },
-  { id: 'lyr-chart-hi', legend: 'chart-hi', key: 'fr-lyr-chart-hi', exclusive: 'chart', defaultOn: false, apply: (v) => chartLayer.setChartVisible('hi', v) },
 ];
 const legendLayersEl = document.getElementById('legend');
 
 /** 应用某个图层开关：同步设置面板 checkbox、图例按钮、图层与持久化。 */
 function applyLayerToggle(t: LayerToggle, on: boolean, persist = true): void {
-  if (on && t.exclusive) {
-    for (const other of LAYER_TOGGLES) {
-      if (other !== t && other.exclusive === t.exclusive) applyLayerToggle(other, false);
-    }
-  }
   t.apply(on);
   if (persist) writePref(t.key, on ? '1' : '0');
   const el = document.getElementById(t.id) as HTMLInputElement | null;
@@ -1801,6 +1845,10 @@ function renderProviders(settings: SettingsResponse): void {
     .join('');
   const current = settings.providers.find((p) => p.id === settings.provider);
   providerNote.textContent = current?.note ?? '';
+  flightDataAttribution = FLIGHT_DATA_ATTRIBUTION[settings.provider] ?? FLIGHT_DATA_ATTRIBUTION.flightaware;
+  refreshAttribution();
+  setFlightBoardAvailable(current?.supportsAirportBoard !== false);
+  if (relatedAirport) void loadAirportFlights(relatedAirport);
 }
 
 providerSelect.addEventListener('change', async () => {

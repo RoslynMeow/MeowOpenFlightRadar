@@ -128,10 +128,12 @@ export function skyvectorRawUrl(protoid: number, scale: number, x: number, y: nu
   return `${BASE}/api/skyvector/raw/${protoid}/${scale}/${x}/${y}.jpg`;
 }
 
-export interface ProviderInfo {  id: string;
+export interface ProviderInfo {
+  id: string;
   label: string;
   requiresKey: boolean;
   available: boolean;
+  supportsAirportBoard: boolean;
   note?: string;
 }
 
