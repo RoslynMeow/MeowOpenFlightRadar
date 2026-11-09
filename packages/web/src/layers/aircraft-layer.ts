@@ -1,6 +1,7 @@
 import L from 'leaflet';
 import type { Aircraft } from '@flightradar/shared';
 import type { MeowMap } from 'meow-tile-kit';
+import { matchesFilter, type AircraftFilter } from '../filter';
 import { worldPixelWidth, nearestCopyX } from '../wrap';
 
 /** 地面飞机颜色。 */
@@ -142,6 +143,8 @@ export class AircraftLayer extends L.Layer {
   private hiddenCats = new Set<string>();
   /** 配色模式：高度 / 地速 / 升降率。 */
   private colorMode: ColorMode = 'altitude';
+  /** 客户端过滤（航司前缀 / 机型 / 高度）。 */
+  private filter: AircraftFilter = { airline: '', type: '', minAlt: null, maxAlt: null };
   /** 低缩放时把飞机聚合成带数字的圆点。 */
   private clusterEnabled = false;
 
@@ -266,6 +269,12 @@ export class AircraftLayer extends L.Layer {
     this.refresh();
   }
 
+  /** 设置客户端过滤（航司前缀 / 机型 / 高度），立即重绘。 */
+  setFilter(filter: AircraftFilter): void {
+    this.filter = filter;
+    this.refresh();
+  }
+
   /** 是否在低缩放时聚合。 */
   setCluster(enabled: boolean): void {
     this.clusterEnabled = enabled;
@@ -303,6 +312,7 @@ export class AircraftLayer extends L.Layer {
     for (const ac of this.data) {
       if (this.hiddenCats.has(categoryOf(ac, this.colorMode))) continue;
       if (this.visibleIds && !this.visibleIds.has(ac.icao24)) continue;
+      if (!matchesFilter(ac, this.filter)) continue;
       const pos = this.positionFor(ac.icao24, now, ac);
       const local = this.app.toLocal(pos.lat, pos.lon);
       const p = map.latLngToLayerPoint([local.lat, local.lng]).subtract(topLeft);
@@ -403,6 +413,7 @@ export class AircraftLayer extends L.Layer {
     for (const ac of this.data) {
       if (this.hiddenCats.has(categoryOf(ac, this.colorMode))) continue;
       if (this.visibleIds && !this.visibleIds.has(ac.icao24)) continue;
+      if (!matchesFilter(ac, this.filter)) continue;
       const pos = this.positionFor(ac.icao24, now, ac);
       const local = this.app.toLocal(pos.lat, pos.lon);
       const base = map.latLngToLayerPoint([local.lat, local.lng]).subtract(topLeft);
@@ -442,6 +453,7 @@ export class AircraftLayer extends L.Layer {
     for (const ac of this.data) {
       if (this.hiddenCats.has(categoryOf(ac, this.colorMode))) continue;
       if (this.visibleIds && !this.visibleIds.has(ac.icao24)) continue;
+      if (!matchesFilter(ac, this.filter)) continue;
       const pos = this.positionFor(ac.icao24, now, ac);
       const local = this.app.toLocal(pos.lat, pos.lon);
       const raw = map.latLngToLayerPoint([local.lat, local.lng]).subtract(topLeft);
