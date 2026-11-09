@@ -1,0 +1,17 @@
+﻿{
+  "$schema": "https://biomejs.dev/schemas/2.6.6/schema.json",
+  "vcs": { "enabled": false },
+  "files": {
+    "includes": [
+      "packages/**/*.ts",
+      "packages/**/*.mjs",
+      "packages/**/*.json",
+      "!packages/**/dist",
+      "!packages/**/data",
+      "!packages/**/release*",
+      "!node_modules"
+    ]
+  },
+  "formatter": { "enabled": false },
+  "linter": { "enabled": true, "rules": { "preset": "recommended" } }
+}

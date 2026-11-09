@@ -19,6 +19,10 @@
     "dist:dir": "npm run setup:data && npm run build -w @flightradar/web && npm run dist:dir -w @flightradar/desktop",
     "dist:win": "npm run setup:data && npm run build -w @flightradar/web && npm run dist:win -w @flightradar/desktop",
     "typecheck": "npm run typecheck -w @flightradar/shared && npm run typecheck -w @flightradar/server && npm run typecheck -w @flightradar/web && npm run typecheck -w @flightradar/desktop",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
     "import:airports": "npm run import:airports -w @flightradar/server",
     "import:airspace": "npm run import:airspace -w @flightradar/server",
     "import:rpp": "npm run import:rpp -w @flightradar/server",
@@ -26,6 +30,8 @@
     "install:chromium": "npm run install:chromium -w @flightradar/server"
   },
   "devDependencies": {
-    "typescript": "^5.4.0"
+    "@biomejs/biome": "^2.6.6",
+    "typescript": "^5.4.0",
+    "vitest": "^5.1.0"
   }
 }
