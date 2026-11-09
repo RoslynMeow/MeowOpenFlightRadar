@@ -144,6 +144,31 @@ export async function setProvider(provider: string): Promise<SettingsResponse> {
   return (await res.json()) as SettingsResponse;
 }
 
+export interface UpstreamStatus {
+  provider: string;
+  lastSuccessAt: number | null;
+  lastError: string | null;
+  lastErrorAt: number | null;
+}
+
+export interface HealthResponse {
+  ok: boolean;
+  provider: string;
+  upstream: UpstreamStatus;
+  providers: ProviderInfo[];
+}
+
+export async function getHealth(): Promise<HealthResponse> {
+  const res = await fetch(`${BASE}/health`);
+  if (!res.ok) throw new Error(`health HTTP ${res.status}`);
+  return (await res.json()) as HealthResponse;
+}
+
+/** 清除服务端退避并立即重试上游。 */
+export async function refreshUpstream(): Promise<void> {
+  await fetch(`${BASE}/api/refresh`, { method: 'POST' });
+}
+
 /** 机场 / 站点天气（METAR + TAF）。 */
 export async function getWeather(ident: string): Promise<Weather> {
   const res = await fetch(`${BASE}/api/weather/${encodeURIComponent(ident)}`);

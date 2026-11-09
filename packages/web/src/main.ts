@@ -6,7 +6,7 @@ import type { FeatureCollection } from 'geojson';
 import { createMap } from 'meow-tile-kit';
 import type { MeowMap } from 'meow-tile-kit';
 import type { Aircraft, AircraftResult, Airport, AirportBoard, AirportFlight, AirportInfoResult, Navaid, NotamResult, TrackPoint, Weather, WeatherReport } from '@flightradar/shared';
-import { aircraftStreamUrl, getAirport, getAirportFlights, getNotams, getRunwaysGeoJSON, getSettings, getTrack, getWeather, searchAirports, setProvider, updateViewport } from './api';
+import { aircraftStreamUrl, getAirport, getAirportFlights, getHealth, getNotams, getRunwaysGeoJSON, getSettings, getTrack, getWeather, refreshUpstream, searchAirports, setProvider, updateViewport } from './api';
 import type { AirportSummary, SettingsResponse } from './api';
 import { AircraftLayer, categoriesOf, categoryOf, type ColorMode } from './layers/aircraft-layer';
 import { AviationLayer, navaidLabel } from './layers/aviation-layer';
@@ -52,6 +52,8 @@ const FLIGHT_DATA_ATTRIBUTION: Record<string, string> = {
     '航班数据 © <a href="https://www.flightaware.com" target="_blank" rel="noopener">FlightAware</a>',
   flightradar24:
     '航班数据 © <a href="https://www.flightradar24.com" target="_blank" rel="noopener">FlightRadar24</a>',
+  adsb:
+    '航班数据 © <a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a>',
 };
 let flightDataAttribution = FLIGHT_DATA_ATTRIBUTION.flightaware;
 let currentAttribution = '';
@@ -78,6 +80,8 @@ const settingsModalEl = document.getElementById('settings-modal')!;
 const settingsCloseEl = document.getElementById('settings-close') as HTMLButtonElement;
 const providerSelect = document.getElementById('provider-select') as HTMLSelectElement;
 const providerNote = document.getElementById('provider-note')!;
+const upstreamStatusEl = document.getElementById('upstream-status');
+const upstreamRetryEl = document.getElementById('upstream-retry') as HTMLButtonElement | null;
 const legendCatsEl = document.getElementById('legend-cats')!;
 const colorModeSelect = document.getElementById('color-mode') as HTMLSelectElement;
 const clusterToggleEl = document.getElementById('cluster-toggle') as HTMLInputElement;
@@ -1843,6 +1847,37 @@ getSettings()
   .catch(() => {
     /* 服务端不可用时忽略 */
   });
+
+async function pollUpstreamStatus(): Promise<void> {
+  if (!upstreamStatusEl) return;
+  try {
+    const health = await getHealth();
+    const u = health.upstream;
+    const failed = !!u.lastError && (!u.lastSuccessAt || (u.lastErrorAt ?? 0) >= (u.lastSuccessAt ?? 0));
+    upstreamStatusEl.classList.toggle('status-error', failed);
+    if (failed) {
+      upstreamStatusEl.textContent = `上游异常：${u.lastError}（自动重试中）`;
+    } else {
+      const at = u.lastSuccessAt ? new Date(u.lastSuccessAt).toLocaleTimeString() : '—';
+      upstreamStatusEl.textContent = `正常 · ${u.provider} · ${at}`;
+    }
+  } catch (e) {
+    upstreamStatusEl.classList.add('status-error');
+    upstreamStatusEl.textContent = `服务端不可用：${e instanceof Error ? e.message : e}`;
+  }
+}
+
+upstreamRetryEl?.addEventListener('click', async () => {
+  try {
+    await refreshUpstream();
+  } catch {
+    /* ignore */
+  }
+  void pollUpstreamStatus();
+});
+
+void pollUpstreamStatus();
+setInterval(() => void pollUpstreamStatus(), 10000);
 
 connect();
 refreshOverlay();

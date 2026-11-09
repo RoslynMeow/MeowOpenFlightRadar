@@ -23,6 +23,10 @@ export class AircraftPoller {
   /** 上游限流/出错后的退避截止时间（ms）。 */
   private backoffUntil = new Map<string, number>();
   private timer: ReturnType<typeof setInterval> | null = null;
+  private lastError: string | null = null;
+  private lastErrorAt = 0;
+  private lastSuccessAt = 0;
+  private lastProvider = '';
 
   constructor(
     private readonly getSource: () => AircraftSource,
@@ -34,6 +38,24 @@ export class AircraftPoller {
   clear(): void {
     this.latest.clear();
     this.backoffUntil.clear();
+    this.lastError = null;
+    this.lastErrorAt = 0;
+  }
+
+  /** 当前上游状态（供 /health 与界面展示）。 */
+  status(): { provider: string; lastSuccessAt: number | null; lastError: string | null; lastErrorAt: number | null } {
+    return {
+      provider: this.lastProvider || this.getSource().id,
+      lastSuccessAt: this.lastSuccessAt || null,
+      lastError: this.lastError,
+      lastErrorAt: this.lastErrorAt || null,
+    };
+  }
+
+  /** 清除退避并立即重试所有订阅视野。 */
+  refresh(): void {
+    this.backoffUntil.clear();
+    for (const key of this.subs.keys()) void this.fetch(key);
   }
 
   subscribe(bbox: BBox): string {
@@ -99,8 +121,13 @@ export class AircraftPoller {
         count: list.length,
         aircraft: list,
       });
+      this.lastProvider = source.id;
+      this.lastSuccessAt = Date.now();
+      this.lastError = null;
       this.backoffUntil.delete(key);
     } catch (e) {
+      this.lastError = e instanceof Error ? e.message : String(e);
+      this.lastErrorAt = Date.now();
       // 429 限流退避久一点，其它错误短暂退避
       const status = e instanceof UpstreamError ? e.status : 0;
       const delay = status === 429 ? 12000 : 5000;

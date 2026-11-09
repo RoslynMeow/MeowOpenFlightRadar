@@ -1255,6 +1255,25 @@ button.legend-item:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.status.status-error {
+  color: #ff6b6b;
+}
+
+.retry-btn {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.retry-btn:hover {
+  border-color: var(--accent);
+}
+
 #status {
   display: flex;
   align-items: center;
