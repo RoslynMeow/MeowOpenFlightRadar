@@ -86,11 +86,19 @@ app.get('/health', (c) =>
     hasAirspaceData: hasAirspaceData(),
     hasFirData: hasFirData(),
     hasNotamSource: hasNotamSource(),
+    upstream: poller.status(),
+    providers: listProviders(),
   }),
 );
 
 // ── 设置：数据源切换 ──
 app.get('/api/settings', (c) => c.json({ provider: manager.getId(), providers: listProviders() }));
+
+// 手动重试：清除退避并立即刷新所有订阅视野。
+app.post('/api/refresh', (c) => {
+  poller.refresh();
+  return c.json({ ok: true });
+});
 
 app.put('/api/settings', async (c) => {
   const body = (await c.req.json().catch(() => null)) as { provider?: unknown } | null;

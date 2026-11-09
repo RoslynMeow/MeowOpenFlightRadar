@@ -272,9 +272,9 @@ export interface NotamResult {
   time: number;
 }
 
-export type AircraftProvider = 'flightaware' | 'flightradar24';
+export type AircraftProvider = 'flightaware' | 'flightradar24' | 'adsb';
 
-export const AIRCRAFT_PROVIDERS: readonly AircraftProvider[] = ['flightaware', 'flightradar24'];
+export const AIRCRAFT_PROVIDERS: readonly AircraftProvider[] = ['flightaware', 'flightradar24', 'adsb'];
 
 export function isAircraftProvider(v: unknown): v is AircraftProvider {
   return typeof v === 'string' && (AIRCRAFT_PROVIDERS as readonly string[]).includes(v);
