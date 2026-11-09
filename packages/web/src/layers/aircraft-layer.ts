@@ -135,6 +135,8 @@ export class AircraftLayer extends L.Layer {
   private data: Aircraft[] = [];
   private motion = new Map<string, Motion>();
   private selected = new Set<string>();
+  /** 关注的飞机（画虚线蓝环）。 */
+  private watched = new Set<string>();
   /** 与所选机场相关的飞机（航班板 / 起降机场匹配），画高亮环。 */
   private highlighted = new Set<string>();
   /** 若非 null，则只绘制这些飞机（选中机场时只看相关航班）。 */
@@ -242,6 +244,12 @@ export class AircraftLayer extends L.Layer {
 
   setSelected(ids: Iterable<string>): void {
     this.selected = new Set(ids);
+    this.refresh();
+  }
+
+  /** 设置关注的飞机，画虚线蓝环。 */
+  setWatched(ids: Iterable<string>): void {
+    this.watched = new Set(ids);
     this.refresh();
   }
 
@@ -546,6 +554,16 @@ export class AircraftLayer extends L.Layer {
       ctx.strokeStyle = 'rgba(255,255,255,0.95)';
       ctx.lineWidth = 2;
       ctx.stroke();
+    }
+
+    if (this.watched.has(ac.icao24)) {
+      ctx.beginPath();
+      ctx.arc(0, 0, 21, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(88,166,255,0.95)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
     ctx.restore();
 
