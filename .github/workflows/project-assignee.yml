@@ -1,0 +1,39 @@
+name: project-assignee
+
+# Assign a new pull request to its author, unless it already has an assignee
+# (so a manual change in the Project is never overwritten).
+# Uses the repository-scoped GITHUB_TOKEN; no PAT required.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  assign-author:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (pr.assignees && pr.assignees.length > 0) {
+              core.info('already assigned, leaving as is');
+              return;
+            }
+            const login = pr.user.login;
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                assignees: [login],
+              });
+              core.info(`assigned to ${login}`);
+            } catch (e) {
+              core.warning(`could not assign ${login}: ${e.message}`);
+            }
