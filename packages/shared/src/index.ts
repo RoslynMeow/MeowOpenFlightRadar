@@ -203,16 +203,6 @@ export interface ReportingPoint {
   elevationFt: number | null;
 }
 
-/** IFR 航路点 / 导航点（FAA CIFP ARINC 424）。 */
-export interface IfrFix {
-  /** 五字识别码（如 `JOSUL`）。 */
-  ident: string;
-  lat: number;
-  lon: number;
-  /** enroute=航路航路点，terminal=终端区航路点。 */
-  kind: 'enroute' | 'terminal';
-}
-
 /** 云层。 */
 export interface WeatherCloud {
   /** 云量代码：FEW / SCT / BKN / OVC / NSC / CAVOK … */

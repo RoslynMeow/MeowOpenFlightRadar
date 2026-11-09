@@ -23,7 +23,6 @@
     "import:airspace": "npm run import:airspace -w @flightradar/server",
     "import:rpp": "npm run import:rpp -w @flightradar/server",
     "import:fir": "npm run import:fir -w @flightradar/server",
-    "import:cifp": "npm run import:cifp -w @flightradar/server",
     "install:chromium": "npm run install:chromium -w @flightradar/server"
   },
   "devDependencies": {
