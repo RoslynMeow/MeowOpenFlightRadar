@@ -1393,6 +1393,28 @@ button.legend-item:hover {
   margin-top: 0;
 }
 
+.set-row input[type='text'],
+.set-row input[type='number'] {
+  width: 110px;
+  min-width: 0;
+  margin-top: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.set-pair {
+  display: flex;
+  gap: 6px;
+}
+
+.set-pair input[type='number'] {
+  width: 64px;
+}
+
 .set-row input[type='checkbox'] {
   width: 16px;
   height: 16px;

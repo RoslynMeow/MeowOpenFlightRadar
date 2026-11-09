@@ -7,6 +7,7 @@ import { createMap } from 'meow-tile-kit';
 import type { MeowMap } from 'meow-tile-kit';
 import type { Aircraft, AircraftResult, Airport, AirportBoard, AirportFlight, AirportInfoResult, Navaid, NotamResult, TrackPoint, Weather, WeatherReport } from '@flightradar/shared';
 import { aircraftStreamUrl, getAirport, getAirportFlights, getHealth, getNotams, getRunwaysGeoJSON, getSettings, getTrack, getWeather, refreshUpstream, searchAirports, setProvider, updateViewport } from './api';
+import { parseFilter } from './filter';
 import type { AirportSummary, SettingsResponse } from './api';
 import { AircraftLayer, categoriesOf, categoryOf, type ColorMode } from './layers/aircraft-layer';
 import { AviationLayer, navaidLabel } from './layers/aviation-layer';
@@ -1867,6 +1868,53 @@ getSettings()
   .catch(() => {
     /* 服务端不可用时忽略 */
   });
+
+// ── 客户端过滤（航司前缀 / 机型 / 高度），持久化到 localStorage ──
+const filterAirlineEl = document.getElementById('filter-airline') as HTMLInputElement | null;
+const filterTypeEl = document.getElementById('filter-type') as HTMLInputElement | null;
+const filterAltMinEl = document.getElementById('filter-alt-min') as HTMLInputElement | null;
+const filterAltMaxEl = document.getElementById('filter-alt-max') as HTMLInputElement | null;
+const FILTER_KEY = 'fra-filter';
+
+const savedFilter = (() => {
+  try {
+    return parseFilter(localStorage.getItem(FILTER_KEY));
+  } catch {
+    return parseFilter(null);
+  }
+})();
+
+if (filterAirlineEl) filterAirlineEl.value = savedFilter.airline;
+if (filterTypeEl) filterTypeEl.value = savedFilter.type;
+if (filterAltMinEl) filterAltMinEl.value = savedFilter.minAlt === null ? '' : String(savedFilter.minAlt);
+if (filterAltMaxEl) filterAltMaxEl.value = savedFilter.maxAlt === null ? '' : String(savedFilter.maxAlt);
+aircraftLayer.setFilter(savedFilter);
+
+function applyFilter(): void {
+  const numberOrNull = (el: HTMLInputElement | null): number | null => {
+    if (!el) return null;
+    const value = el.value.trim();
+    if (!value) return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  const next = {
+    airline: (filterAirlineEl?.value ?? '').trim().toUpperCase(),
+    type: (filterTypeEl?.value ?? '').trim().toUpperCase(),
+    minAlt: numberOrNull(filterAltMinEl),
+    maxAlt: numberOrNull(filterAltMaxEl),
+  };
+  aircraftLayer.setFilter(next);
+  try {
+    localStorage.setItem(FILTER_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
+
+for (const el of [filterAirlineEl, filterTypeEl, filterAltMinEl, filterAltMaxEl]) {
+  el?.addEventListener('input', applyFilter);
+}
 
 async function pollUpstreamStatus(): Promise<void> {
   if (!upstreamStatusEl) return;

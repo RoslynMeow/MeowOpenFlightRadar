@@ -120,6 +120,15 @@
         </label>
         <label class="set-row"><span>低缩放聚合</span><input type="checkbox" id="cluster-toggle" /></label>
         <label class="set-row" id="autoupdate-row"><span>自动更新（桌面版）</span><input type="checkbox" id="autoupdate-toggle" /></label>
+        <div class="title" style="margin-top:10px">过滤</div>
+        <label class="set-row"><span>航司前缀</span><input id="filter-airline" type="text" placeholder="CCA" /></label>
+        <label class="set-row"><span>机型</span><input id="filter-type" type="text" placeholder="B738" /></label>
+        <label class="set-row"><span>高度 (ft)</span>
+          <span class="set-pair">
+            <input id="filter-alt-min" type="number" placeholder="最低" />
+            <input id="filter-alt-max" type="number" placeholder="最高" />
+          </span>
+        </label>
         <div class="title" style="margin-top:10px">叠加图层</div>
         <label class="set-row"><span>机场</span><input type="checkbox" id="lyr-airports" /></label>
         <label class="set-row"><span>报告点 (VRP)</span><input type="checkbox" id="lyr-rpp" /></label>
