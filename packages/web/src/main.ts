@@ -97,9 +97,42 @@ const fbBodyEl = document.getElementById('fb-body')!;
 const fbCloseEl = document.getElementById('fb-close') as HTMLButtonElement;
 const fbCollapseEl = document.getElementById('fb-collapse') as HTMLButtonElement;
 const fbResetEl = document.getElementById('fb-reset') as HTMLButtonElement;
+const replayEl = document.getElementById('replay')!;
+const replayTitleEl = document.getElementById('replay-title')!;
+const replayPlayEl = document.getElementById('replay-play') as HTMLButtonElement;
+const replayRangeEl = document.getElementById('replay-range') as HTMLInputElement;
+const replayInfoEl = document.getElementById('replay-info')!;
+const replayCloseEl = document.getElementById('replay-close') as HTMLButtonElement;
 
 const aircraftLayer = new AircraftLayer(app);
 aircraftLayer.addTo(map);
+
+const adWatchEl = document.getElementById('ad-watch') as HTMLButtonElement | null;
+const WATCH_AIRCRAFT_KEY = 'fra-watch-aircraft';
+const WATCH_AIRPORTS_KEY = 'fra-watch-airports';
+
+function loadStringSet(key: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    return new Set(Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveStringSet(key: string, set: Set<string>): void {
+  try {
+    localStorage.setItem(key, JSON.stringify([...set]));
+  } catch {
+    /* ignore */
+  }
+}
+
+const watchedAircraft = loadStringSet(WATCH_AIRCRAFT_KEY);
+const watchedAirports = loadStringSet(WATCH_AIRPORTS_KEY);
+aircraftLayer.setWatched(watchedAircraft);
 /** 每架选中飞机一条航迹（icao24 -> TrackLayer）。 */
 const tracks = new Map<string, TrackLayer>();
 const aviationLayer = new AviationLayer(app);
@@ -203,8 +236,18 @@ function upsertCallout(id: string, kind: CalloutKind, html: string, anchor: Anch
   if (!c) {
     const box = document.createElement('div');
     box.className = 'callout-box';
+    const watchButton =
+      kind === 'aircraft'
+        ? '<button type="button" class="callout-watch" title="关注">☆</button>'
+        : '';
+    const replayButton =
+      kind === 'aircraft'
+        ? '<button type="button" class="callout-replay" title="回放航迹">▶</button>'
+        : '';
     box.innerHTML =
       '<div class="callout-bar"><span class="callout-grip" title="拖动">⠿</span>' +
+      watchButton +
+      replayButton +
       '<button type="button" class="callout-follow" title="跟随该机">⌖</button>' +
       '<span class="spacer"></span>' +
       '<button type="button" class="callout-close" title="关闭">✕</button></div>' +
@@ -213,6 +256,33 @@ function upsertCallout(id: string, kind: CalloutKind, html: string, anchor: Anch
     const content = box.querySelector<HTMLElement>('.callout-content')!;
     const followBtn = box.querySelector<HTMLButtonElement>('.callout-follow')!;
     followBtn.addEventListener('click', () => removeFollowOrToggle(id));
+    const watchBtn = box.querySelector<HTMLButtonElement>('.callout-watch');
+    if (watchBtn) {
+      const icao = id.slice(3);
+      const sync = (): void => {
+        const on = watchedAircraft.has(icao);
+        watchBtn.textContent = on ? '★' : '☆';
+        watchBtn.classList.toggle('on', on);
+      };
+      sync();
+      watchBtn.addEventListener('click', () => {
+        if (watchedAircraft.has(icao)) watchedAircraft.delete(icao);
+        else watchedAircraft.add(icao);
+        aircraftLayer.setWatched(watchedAircraft);
+        saveStringSet(WATCH_AIRCRAFT_KEY, watchedAircraft);
+        sync();
+        renderWatchlist();
+      });
+    }
+    const replayBtn = box.querySelector<HTMLButtonElement>('.callout-replay');
+    if (replayBtn) {
+      const icao = id.slice(3);
+      replayBtn.addEventListener('click', () => {
+        const ac = lastAircraft.find((a) => a.icao24 === icao);
+        const label = ac?.callsign?.trim() || ac?.registration || icao.toUpperCase();
+        void openReplay(icao, label);
+      });
+    }
     const halo = document.createElementNS(SVGNS, 'line');
     halo.setAttribute('class', 'callout-halo');
     const line = document.createElementNS(SVGNS, 'line');
@@ -557,6 +627,105 @@ async function loadTrack(icao24: string): Promise<void> {
   }
 }
 
+// ── 航迹回放 ──
+let replayMarker: L.CircleMarker | null = null;
+let replayTimer: number | null = null;
+let replayPoints: TrackPoint[] = [];
+let replayIndex = 0;
+
+function stopReplay(): void {
+  if (replayTimer !== null) {
+    window.clearInterval(replayTimer);
+    replayTimer = null;
+  }
+  replayPlayEl.textContent = '▶';
+}
+
+function moveReplayMarker(): void {
+  const point = replayPoints[replayIndex];
+  if (!point) return;
+  const local = app.toLocal(point.lat, point.lon);
+  if (!replayMarker) {
+    replayMarker = L.circleMarker([local.lat, local.lng], {
+      radius: 6,
+      color: '#58a6ff',
+      fillColor: '#58a6ff',
+      fillOpacity: 0.95,
+      weight: 2,
+    }).addTo(map);
+  } else {
+    replayMarker.setLatLng([local.lat, local.lng]);
+  }
+  const time = point.t ? new Date(point.t).toLocaleTimeString() : '—';
+  const alt = point.altFt === null || point.altFt === undefined ? '—' : `${point.altFt.toLocaleString()} ft`;
+  replayInfoEl.textContent = `${time} · ${alt} · ${replayIndex + 1}/${replayPoints.length}`;
+}
+
+function setReplayIndex(index: number): void {
+  if (!replayPoints.length) return;
+  replayIndex = Math.max(0, Math.min(replayPoints.length - 1, index));
+  replayRangeEl.value = String(replayIndex);
+  moveReplayMarker();
+}
+
+async function openReplay(icao24: string, label: string): Promise<void> {
+  replayEl.classList.remove('hidden');
+  replayTitleEl.textContent = `${label} · 航迹回放`;
+  try {
+    const res = await getTrack(icao24);
+    if (res.points.length < 2) {
+      replayTitleEl.textContent = `${label} · 无历史航迹`;
+      replayInfoEl.textContent = '该机暂无可回放的航迹';
+      replayPoints = [];
+      replayRangeEl.max = '0';
+      replayRangeEl.value = '0';
+      stopReplay();
+      return;
+    }
+    stopReplay();
+    replayPoints = res.points;
+    replayRangeEl.min = '0';
+    replayRangeEl.max = String(res.points.length - 1);
+    setReplayIndex(0);
+  } catch (e) {
+    replayTitleEl.textContent = `${label} · 回放失败`;
+    replayInfoEl.textContent = e instanceof Error ? e.message : String(e);
+    replayPoints = [];
+  }
+}
+
+function closeReplay(): void {
+  stopReplay();
+  replayEl.classList.add('hidden');
+  replayPoints = [];
+  if (replayMarker) {
+    map.removeLayer(replayMarker);
+    replayMarker = null;
+  }
+}
+
+replayCloseEl.addEventListener('click', closeReplay);
+replayRangeEl.addEventListener('input', () => {
+  stopReplay();
+  setReplayIndex(Number(replayRangeEl.value));
+});
+replayPlayEl.addEventListener('click', () => {
+  if (replayTimer !== null) {
+    stopReplay();
+    return;
+  }
+  if (!replayPoints.length) return;
+  if (replayIndex >= replayPoints.length - 1) setReplayIndex(0);
+  replayPlayEl.textContent = '⏸';
+  replayTimer = window.setInterval(() => {
+    if (replayIndex >= replayPoints.length - 1) {
+      stopReplay();
+      return;
+    }
+    setReplayIndex(replayIndex + 1);
+  }, 100);
+});
+
 function aircraftHtml(ac: Aircraft): string {
   const title = ac.callsign || ac.registration || ac.icao24.toUpperCase();
   const rows: Array<[string, string]> = [
@@ -709,6 +878,14 @@ function drawRunways(geojson: FeatureCollection): void {
   }
 }
 
+/** 机场关注状态同步到面板按钮。 */
+function syncAirportWatch(ident: string | null): void {
+  if (!adWatchEl) return;
+  const on = !!ident && watchedAirports.has(ident);
+  adWatchEl.textContent = on ? '★' : '☆';
+  adWatchEl.classList.toggle('on', on);
+}
+
 async function loadAirport(ident: string): Promise<void> {
   relatedAirport = ident; // 一次只开一个机场
   try {
@@ -716,9 +893,17 @@ async function loadAirport(ident: string): Promise<void> {
     currentAirportObj = airport;
     drawRunways(geojson);
     adTitleEl.textContent = airport.name;
-    adSubEl.textContent = [airport.ident, airport.iata, airport.municipality, airport.isoCountry]
+    const runwayCount = geojson.features.length;
+    adSubEl.textContent = [
+      airport.ident,
+      airport.iata,
+      airport.municipality,
+      airport.isoCountry,
+      runwayCount ? `${runwayCount} 跑道` : null,
+    ]
       .filter(Boolean)
       .join(' · ');
+    syncAirportWatch(airport.ident);
     // 把机场放在视口偏上位置，避免被底部面板遮住
     const c = app.toLocal(airport.lat, airport.lon);
     const zoom = Math.max(map.getZoom(), 12);
@@ -738,6 +923,7 @@ async function loadAirport(ident: string): Promise<void> {
     clearWeatherBox();
     adTitleEl.textContent = '未找到机场';
     adSubEl.textContent = ident;
+    syncAirportWatch(null);
     airportDockEl.classList.remove('hidden');
     relatedAirport = null;
     updateHighlight();
@@ -1018,6 +1204,16 @@ fbCollapseEl.addEventListener('click', () => {
 });
 
 fbResetEl.addEventListener('click', resetDockLayout);
+
+adWatchEl?.addEventListener('click', () => {
+  const ident = relatedAirport;
+  if (!ident) return;
+  if (watchedAirports.has(ident)) watchedAirports.delete(ident);
+  else watchedAirports.add(ident);
+  saveStringSet(WATCH_AIRPORTS_KEY, watchedAirports);
+  syncAirportWatch(ident);
+  renderWatchlist();
+});
 
 // 面板可拖动（按住航班板标题栏）
 {
@@ -1621,8 +1817,46 @@ chartSelectEl.addEventListener('change', () => {
 
 // ── 设置模态框 ──
 function openSettings(): void {
+  renderWatchlist();
   settingsModalEl.classList.remove('hidden');
 }
+
+function renderWatchlist(): void {
+  const el = document.getElementById('watchlist');
+  if (!el) return;
+  const items: string[] = [];
+  for (const icao of watchedAircraft) {
+    const ac = lastAircraft.find((a) => a.icao24 === icao);
+    const label = ac?.callsign?.trim() || ac?.registration || icao.toUpperCase();
+    items.push(
+      `<button type="button" class="watch-item" data-kind="aircraft" data-id="${esc(icao)}">${esc(label)}<span>飞机</span></button>`,
+    );
+  }
+  for (const ident of watchedAirports) {
+    items.push(
+      `<button type="button" class="watch-item" data-kind="airport" data-id="${esc(ident)}">${esc(ident)}<span>机场</span></button>`,
+    );
+  }
+  el.innerHTML = items.length ? items.join('') : '<span class="status">暂无关注</span>';
+}
+
+document.getElementById('watchlist')?.addEventListener('click', (e) => {
+  const btn = (e.target as HTMLElement).closest<HTMLElement>('.watch-item');
+  if (!btn) return;
+  const kind = btn.dataset.kind;
+  const id = btn.dataset.id;
+  if (!id) return;
+  if (kind === 'airport') {
+    void loadAirport(id);
+    closeSettings();
+    return;
+  }
+  const ac = lastAircraft.find((a) => a.icao24 === id);
+  if (ac) {
+    selectAircraft(ac);
+    closeSettings();
+  }
+});
 function closeSettings(): void {
   settingsModalEl.classList.add('hidden');
 }
