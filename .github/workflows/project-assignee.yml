@@ -1,7 +1,8 @@
 name: project-assignee
 
-# Assign a new pull request to its author, unless it already has an assignee
-# (so a manual change in the Project is never overwritten).
+# Assign a new pull request to its opener plus the GitHub users who authored its
+# commits (bots excluded, only assignable users, max 10). Skipped when the PR
+# already has an assignee, so a manual Project change is never overwritten.
 # Uses the repository-scoped GITHUB_TOKEN; no PAT required.
 
 on:
@@ -25,15 +26,44 @@ jobs:
               core.info('already assigned, leaving as is');
               return;
             }
-            const login = pr.user.login;
+
+            const data = await github.graphql(
+              `query($owner:String!,$repo:String!,$number:Int!){
+                repository(owner:$owner,name:$repo){
+                  assignableUsers(first:100){ nodes { login } }
+                  pullRequest(number:$number){
+                    commits(first:100){ nodes { commit { author { user { login } } } } }
+                  }
+                }
+              }`,
+              { owner: context.repo.owner, repo: context.repo.repo, number: pr.number },
+            );
+
+            const logins = new Set();
+            if (pr.user && pr.user.login) logins.add(pr.user.login);
+            for (const node of data.repository.pullRequest.commits.nodes) {
+              const login = node.commit.author && node.commit.author.user && node.commit.author.user.login;
+              if (login) logins.add(login);
+            }
+
+            const allowed = new Set(data.repository.assignableUsers.nodes.map((n) => n.login));
+            const assignees = [...logins]
+              .filter((l) => allowed.has(l) && !l.endsWith('[bot]'))
+              .slice(0, 10);
+
+            if (!assignees.length) {
+              core.info('no eligible assignees');
+              return;
+            }
+
             try {
               await github.rest.issues.addAssignees({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: pr.number,
-                assignees: [login],
+                assignees,
               });
-              core.info(`assigned to ${login}`);
+              core.info(`assigned to ${assignees.join(', ')}`);
             } catch (e) {
-              core.warning(`could not assign ${login}: ${e.message}`);
+              core.warning(`could not assign: ${e.message}`);
             }
