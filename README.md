@@ -16,4 +16,8 @@
 
 </div>
 
-<!-- 截图 / GIF 占位：有素材后在此处插入 <img src="docs/assets/preview.gif" width="900"> -->
+## 预览
+
+<div align="center">
+  <img src="docs/assets/preview.jpg" alt="MeowOpenFlightRadar 预览" width="100%" />
+</div>

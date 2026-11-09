@@ -1759,3 +1759,76 @@ button.legend-item:hover {
 .fa-note.fa-err {
   color: #ff7b72;
 }
+
+/* 手机 / 平板 */
+@media (max-width: 720px) {
+  #hud {
+    top: 8px;
+    right: 8px;
+    padding: 6px 8px;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  #legend {
+    top: 58px;
+    right: 8px;
+    width: auto;
+    max-width: 46vw;
+  }
+
+  #search {
+    bottom: 10px;
+  }
+
+  .airport-dock {
+    bottom: 60px;
+    width: calc(100vw - 16px);
+    height: 32vh;
+    max-height: 32vh;
+  }
+
+  .modal-box {
+    max-height: 86vh;
+    overflow-y: auto;
+  }
+
+  .callout-box {
+    max-width: calc(100vw - 16px);
+  }
+}
+
+@media (max-width: 480px) {
+  .airport-dock {
+    height: 42vh;
+    max-height: 42vh;
+  }
+
+  #legend {
+    max-width: 58vw;
+  }
+
+  /* 避免 iOS 聚焦时自动放大 */
+  #search input {
+    font-size: 16px;
+  }
+}
+
+@media (pointer: coarse) {
+  #settings-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .ad-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  .legend-item {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+}

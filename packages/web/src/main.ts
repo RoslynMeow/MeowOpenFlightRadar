@@ -1629,7 +1629,27 @@ settingsBtn.addEventListener('click', openSettings);
 settingsCloseEl.addEventListener('click', closeSettings);
 settingsModalEl.querySelector('.modal-backdrop')?.addEventListener('click', closeSettings);
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeSettings();
+  const target = e.target as HTMLElement | null;
+  const typing =
+    !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+
+  if (e.key === 'Escape') {
+    closeSettings();
+    hideSearchResults();
+    searchEl.blur();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    searchEl.focus();
+    searchEl.select();
+    return;
+  }
+  if (e.key === '/' && !typing) {
+    e.preventDefault();
+    searchEl.focus();
+    searchEl.select();
+  }
 });
 
 // ── 图例折叠（记住状态） ──
@@ -1878,6 +1898,14 @@ upstreamRetryEl?.addEventListener('click', async () => {
 
 void pollUpstreamStatus();
 setInterval(() => void pollUpstreamStatus(), 10000);
+
+if (import.meta.env.PROD && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
+      /* ignore */
+    });
+  });
+}
 
 connect();
 refreshOverlay();
