@@ -13,7 +13,6 @@ import { listProviders } from './sources/index.js';
 import { airportsInBBox, getAirport, hasAirportData, runwaysGeoJSON, runwaysInBBox, searchAirports } from './airports.js';
 import { hasNavaidData, navaidsInBBox } from './navaids.js';
 import { hasReportingPointData, reportingPointsInBBox } from './reporting-points.js';
-import { fixesInBBox, hasCifpData, proceduresForAirport } from './cifp.js';
 import { airspaceInBBox, hasAirspaceData } from './airspace.js';
 import { firInBBox, hasFirData } from './fir.js';
 import { SKYVECTOR_PROTOIDS, skyvectorGridSize, skyvectorMeta, skyvectorTile } from './skyvector.js';
@@ -84,7 +83,6 @@ app.get('/health', (c) =>
     hasAirportData: hasAirportData(),
     hasNavaidData: hasNavaidData(),
     hasReportingPointData: hasReportingPointData(),
-    hasCifpData: hasCifpData(),
     hasAirspaceData: hasAirspaceData(),
     hasFirData: hasFirData(),
     hasNotamSource: hasNotamSource(),
@@ -146,14 +144,6 @@ app.get('/api/reporting-points', (c) => {
   return c.json({ count: items.length, items });
 });
 
-// IFR 航路点（FAA CIFP）
-app.get('/api/waypoints', (c) => {
-  const bbox = parseBBoxString(c.req.query('bbox'));
-  if (!bbox) return c.json({ error: 'invalid bbox, expected lamin,lomin,lamax,lomax' }, 400);
-  const items = inBBoxParts(bbox, (b) => fixesInBBox(b));
-  return c.json({ count: items.length, items });
-});
-
 app.get('/api/airspace', (c) => {
   const bbox = parseBBoxString(c.req.query('bbox'));
   if (!bbox) return c.json({ error: 'invalid bbox, expected lamin,lomin,lamax,lomax' }, 400);
@@ -182,12 +172,6 @@ app.get('/api/airports/:ident/runways.geojson', (c) => {
   const airport = getAirport(c.req.param('ident'));
   if (!airport) return c.json({ error: 'airport not found' }, 404);
   return c.json(runwaysGeoJSON(airport));
-});
-
-// 某机场的 SID/STAR 进离场程序（FAA CIFP）
-app.get('/api/airports/:ident/procedures', (c) => {
-  const ident = c.req.param('ident').toUpperCase();
-  return c.json(proceduresForAirport(ident));
 });
 
 // FlightAware 机场航班板（到达/出发/在途/计划），60s 缓存

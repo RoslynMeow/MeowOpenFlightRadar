@@ -6,7 +6,7 @@ import type { FeatureCollection } from 'geojson';
 import { createMap } from 'meow-tile-kit';
 import type { MeowMap } from 'meow-tile-kit';
 import type { Aircraft, AircraftResult, Airport, AirportBoard, AirportFlight, AirportInfoResult, Navaid, NotamResult, TrackPoint, Weather, WeatherReport } from '@flightradar/shared';
-import { aircraftStreamUrl, getAirport, getAirportFlights, getAirportProcedures, getNotams, getRunwaysGeoJSON, getSettings, getTrack, getWeather, searchAirports, setProvider, updateViewport } from './api';
+import { aircraftStreamUrl, getAirport, getAirportFlights, getNotams, getRunwaysGeoJSON, getSettings, getTrack, getWeather, searchAirports, setProvider, updateViewport } from './api';
 import type { AirportSummary, SettingsResponse } from './api';
 import { AircraftLayer, categoriesOf, categoryOf, type ColorMode } from './layers/aircraft-layer';
 import { AviationLayer, navaidLabel } from './layers/aviation-layer';
@@ -15,8 +15,6 @@ import { FirLayer } from './layers/fir-layer';
 import { TrackLayer } from './layers/track-layer';
 import { createRunwayLayer, pickRunway, RunwayOverlay } from './layers/runway-layer';
 import { ReportingPointLayer } from './layers/reporting-point-layer';
-import { WaypointLayer } from './layers/waypoint-layer';
-import { ProcedureLayer } from './layers/procedure-layer';
 import { ChartLayer } from './layers/chart-layer';
 import { copyOffsets } from './wrap';
 
@@ -107,8 +105,6 @@ const airspaceLayer = new AirspaceLayer(app);
 const firLayer = new FirLayer(app);
 const runwayOverlay = new RunwayOverlay(app);
 const reportingPointLayer = new ReportingPointLayer(app);
-const waypointLayer = new WaypointLayer(app);
-const procedureLayer = new ProcedureLayer(app);
 const chartLayer = new ChartLayer(app);
 
 function esc(s: unknown): string {
@@ -146,7 +142,6 @@ function refreshOverlay(): void {
   void firLayer.refresh(bbox);
   void runwayOverlay.refresh(bbox);
   void reportingPointLayer.refresh(bbox);
-  void waypointLayer.refresh(bbox);
 }
 
 /** 机场预览开关：预览时显示导航台 / NDB，其余时段关闭。 */
@@ -730,32 +725,17 @@ async function loadAirport(ident: string): Promise<void> {
     updateWeatherBox(airport, null);
     void loadWeather(airport.ident);
     void loadAirportFlights(airport.ident);
-    void loadProcedures(airport.ident);
     setAirportPreview(true);
   } catch (e) {
     currentAirportObj = null;
     setAirportPreview(false);
     clearWindRose();
     clearWeatherBox();
-    procedureLayer.clear();
     adTitleEl.textContent = '未找到机场';
     adSubEl.textContent = ident;
     airportDockEl.classList.remove('hidden');
     relatedAirport = null;
     updateHighlight();
-  }
-}
-
-/** 拉取并叠加某机场的 SID/STAR（FAA CIFP；无数据时自动隐藏）。 */
-async function loadProcedures(ident: string): Promise<void> {
-  try {
-    const gj = await getAirportProcedures(ident);
-    if (relatedAirport !== ident) return;
-    procedureLayer.setData(gj.features.length ? gj : null);
-    const { sid, star } = procedureLayer.counts();
-    if (sid || star) adSubEl.textContent = `${adSubEl.textContent} · SID ${sid} / STAR ${star}`;
-  } catch {
-    if (relatedAirport === ident) procedureLayer.clear();
   }
 }
 
@@ -1613,8 +1593,6 @@ app.on('sourcechange', () => {
   firLayer.invalidate();
   runwayOverlay.invalidate();
   reportingPointLayer.invalidate();
-  waypointLayer.invalidate();
-  procedureLayer.invalidate();
   if (lastRunways) drawRunways(lastRunways);
   void updateViewport(SID, currentBBox());
   refreshOverlay();
@@ -1795,9 +1773,6 @@ const LAYER_TOGGLES: LayerToggle[] = [
     },
   },
   { id: 'lyr-rpp', key: 'fr-lyr-rpp', apply: (v) => reportingPointLayer.setVisible(v) },
-  { id: 'lyr-fixes', key: 'fr-lyr-fixes', apply: (v) => waypointLayer.setVisible(v) },
-  { id: 'lyr-sid', key: 'fr-lyr-sid', apply: (v) => procedureLayer.setShowSid(v) },
-  { id: 'lyr-star', key: 'fr-lyr-star', apply: (v) => procedureLayer.setShowStar(v) },
   {
     id: 'lyr-airspace-all',
     legend: 'airspace-all',
