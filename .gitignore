@@ -24,3 +24,6 @@ packages/server/data/reporting-points.json
 packages/server/data/cifp-fixes.json
 packages/server/data/cifp-procedures.json
 packages/server/data/cifp-meta.json
+
+# local wiki clone (separate git repo, not part of the app)
+wiki/
