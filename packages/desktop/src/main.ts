@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { createServer, type Server } from 'node:http';
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
-import { setBrowserHostFactory } from '../../server/src/sources/index.js';
+import { setBrowserHostFactory } from 'meow-open-flight-core/sources';
 import { dispose, startApiServer } from '../../server/src/app.js';
 import { ElectronBrowserHost } from './electron-host.js';
 
@@ -10,7 +10,10 @@ const REPO = 'RoslynMeow/MeowOpenFlightRadar';
 
 const DIST_DIR = __dirname;
 const WEB_DIR = app.isPackaged ? join(process.resourcesPath, 'web') : join(DIST_DIR, '..', '..', 'web', 'dist');
-const DATA_DIR = app.isPackaged ? join(process.resourcesPath, 'data') : join(DIST_DIR, '..', '..', 'server', 'data');
+const DATA_DIR = app.isPackaged ? join(process.resourcesPath, 'data') : join(DIST_DIR, '..', '..', 'core', 'data');
+const AIRSPACE_DIR = app.isPackaged
+  ? join(process.resourcesPath, 'airspace')
+  : join(DIST_DIR, '..', '..', 'airspace', 'data', 'airspace');
 
 let apiServer: ReturnType<typeof startApiServer> | null = null;
 let webServer: Server | null = null;
@@ -158,6 +161,7 @@ async function startApi(): Promise<number> {
 
 async function main(): Promise<void> {
   process.env.FLIGHTRADAR_DATA_DIR = DATA_DIR;
+  process.env.FLIGHTRADAR_AIRSPACE_DIR = AIRSPACE_DIR;
   setBrowserHostFactory(() => new ElectronBrowserHost());
 
   const [apiPort, webPort] = await Promise.all([startApi(), startStaticServer(WEB_DIR)]);

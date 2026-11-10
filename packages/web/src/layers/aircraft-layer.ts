@@ -1,5 +1,5 @@
 import L from 'leaflet';
-import type { Aircraft } from '@flightradar/shared';
+import type { Aircraft } from 'meow-open-flight-core/shared';
 import type { MeowMap } from 'meow-tile-kit';
 import { matchesFilter, type AircraftFilter } from '../filter';
 import { worldPixelWidth, nearestCopyX } from '../wrap';

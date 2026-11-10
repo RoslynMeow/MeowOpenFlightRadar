@@ -1,0 +1,56 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - 'core-v*'
+      - 'airspace-v*'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to publish
+        required: true
+        type: choice
+        options:
+          - core
+          - airspace
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Ensure npm supports trusted publishing
+        run: npm install -g npm@latest
+
+      - name: Install
+        run: npm ci
+
+      - name: Prepare data
+        run: npm run setup:data
+
+      - name: Verify data
+        run: npm run verify:data
+
+      - name: Test
+        run: npm test
+
+      - name: Publish
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_name }}" == airspace-v* || "${{ inputs.package }}" == "airspace" ]]; then
+            npm publish -w meow-open-flight-airspace --provenance --access public
+          else
+            npm publish -w meow-open-flight-core --provenance --access public
+          fi

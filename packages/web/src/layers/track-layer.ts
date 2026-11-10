@@ -1,5 +1,5 @@
 import L from 'leaflet';
-import type { TrackPoint } from '@flightradar/shared';
+import type { TrackPoint } from 'meow-open-flight-core/shared';
 import type { MeowMap } from 'meow-tile-kit';
 import { copyOffsets } from '../wrap';
 

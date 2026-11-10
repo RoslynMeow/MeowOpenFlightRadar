@@ -1,4 +1,4 @@
-import type { Aircraft } from '@flightradar/shared';
+import type { Aircraft } from 'meow-open-flight-core/shared';
 
 /** Aircraft filter applied client-side before drawing / picking. */
 export interface AircraftFilter {
