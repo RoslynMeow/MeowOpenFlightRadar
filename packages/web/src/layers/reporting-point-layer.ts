@@ -1,5 +1,5 @@
 import L from 'leaflet';
-import type { ReportingPoint } from '@flightradar/shared';
+import type { ReportingPoint } from 'meow-open-flight-core/shared';
 import type { MeowMap } from 'meow-tile-kit';
 import { fetchReportingPointsInBBox } from '../api';
 import { copyOffsets } from '../wrap';

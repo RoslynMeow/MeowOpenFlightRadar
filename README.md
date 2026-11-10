@@ -21,3 +21,21 @@
 <div align="center">
   <img src="docs/assets/preview.jpg" alt="MeowOpenFlightRadar 预览" width="100%" />
 </div>
+
+## Packages
+
+| 包 | 说明 |
+| --- | --- |
+| [`meow-open-flight-core`](packages/core) | 静态航空数据、实时飞机数据源、轮询/SSE、天气/NOTAM、Hono API |
+| [`meow-open-flight-airspace`](packages/airspace) | openAIP 全球空域数据（可选） |
+
+## License
+
+- **代码**：MIT，见 [`LICENSE`](LICENSE)。
+- **数据**：按各自来源许可分发，见 [`packages/core/DATA-LICENSES.md`](packages/core/DATA-LICENSES.md) 和 [`packages/airspace/DATA-LICENSES.md`](packages/airspace/DATA-LICENSES.md)。
+  - OurAirports：Public Domain
+  - openAIP 空域 / VRP：CC BY-NC 4.0（仅限非商业用途）
+  - VATSIM / VATSpy FIR：CC BY-SA 4.0
+
+> 本项目仅供个人学习、研究与技术交流使用。实时飞机数据来自非官方接口，可能违反其服务条款；SkyVector 航图为 Jeppesen 授权数据，仅供个人测试，请勿公开分发。
+

@@ -1,4 +1,4 @@
-import type { Aircraft } from '@flightradar/shared';
+import type { Aircraft } from 'meow-open-flight-core/shared';
 import { describe, expect, it } from 'vitest';
 import { EMPTY_FILTER, matchesFilter, parseFilter } from './filter';
 

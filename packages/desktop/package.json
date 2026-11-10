@@ -17,6 +17,7 @@
   "devDependencies": {
     "@flightradar/server": "*",
     "@flightradar/web": "*",
+    "meow-open-flight-core": "^0.1.0",
     "electron": "44.7.0",
     "electron-builder": "^25.1.8",
     "esbuild": "^0.25.0"
@@ -37,8 +38,12 @@
         "to": "web"
       },
       {
-        "from": "../server/data",
+        "from": "../core/data",
         "to": "data"
+      },
+      {
+        "from": "../airspace/data/airspace",
+        "to": "airspace"
       }
     ],
     "asar": true,

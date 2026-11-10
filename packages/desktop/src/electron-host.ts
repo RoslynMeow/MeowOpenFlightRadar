@@ -1,5 +1,5 @@
 import { BrowserWindow } from 'electron';
-import type { BrowserHost } from '../../server/src/sources/browser-host.js';
+import type { BrowserHost } from 'meow-open-flight-core/sources';
 
 const BOOTSTRAP_URL = 'https://www.flightaware.com/live/map';
 const TOKEN_TTL_MS = 20 * 60 * 1000;

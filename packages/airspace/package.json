@@ -1,0 +1,60 @@
+{
+  "name": "meow-open-flight-airspace",
+  "version": "0.1.0",
+  "description": "openAIP global airspace dataset and bbox query helper for MeowOpenFlightCore.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./data/*": "./data/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "data",
+    "README.md",
+    "NOTICE.md",
+    "DATA-LICENSES.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "setup:data": "node scripts/setup-data.mjs",
+    "import:airspace": "node scripts/import-airspace.mjs",
+    "verify:data": "node scripts/verify-data.mjs",
+    "prepack": "npm run build && npm run verify:data"
+  },
+  "dependencies": {
+    "meow-open-flight-core": "^0.1.0",
+    "@types/geojson": "^7946.0.14"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RoslynMeow/MeowOpenFlightRadar.git",
+    "directory": "packages/airspace"
+  },
+  "keywords": [
+    "aviation",
+    "airspace",
+    "openaip",
+    "geojson",
+    "flight-tracking"
+  ],
+  "license": "MIT"
+}
