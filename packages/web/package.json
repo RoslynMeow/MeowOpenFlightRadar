@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@flightradar/shared": "*",
+    "meow-open-flight-core": "^0.1.0",
     "leaflet": "^1.9.4",
     "meow-tile-kit": "^1.1.0"
   },

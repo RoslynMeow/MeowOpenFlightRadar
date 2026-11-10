@@ -1,4 +1,4 @@
-import type { AircraftResult, Airport, AirportInfoResult, Navaid, NotamResult, ReportingPoint, TrackResult, Weather } from '@flightradar/shared';
+import type { AircraftResult, Airport, AirportInfoResult, Navaid, NotamResult, ReportingPoint, TrackResult, Weather } from 'meow-open-flight-core/shared';
 import type { FeatureCollection } from 'geojson';
 
 // Electron 通过 preload 注入 __FLIGHTRADAR__.apiBase；开发/浏览器下用 VITE_API_BASE 或同源。

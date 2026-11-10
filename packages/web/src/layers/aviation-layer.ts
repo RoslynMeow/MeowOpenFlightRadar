@@ -1,5 +1,5 @@
 import L from 'leaflet';
-import type { Navaid } from '@flightradar/shared';
+import type { Navaid } from 'meow-open-flight-core/shared';
 import type { MeowMap } from 'meow-tile-kit';
 import { fetchAirportsInBBox, fetchNavaidsInBBox, type AirportSummary } from '../api';
 import { copyOffsets, nearestCopyX, worldPixelWidth } from '../wrap';

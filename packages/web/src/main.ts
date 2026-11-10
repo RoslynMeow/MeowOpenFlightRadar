@@ -5,7 +5,7 @@ import type { LeafletMouseEvent } from 'leaflet';
 import type { FeatureCollection } from 'geojson';
 import { createMap } from 'meow-tile-kit';
 import type { MeowMap } from 'meow-tile-kit';
-import type { Aircraft, AircraftResult, Airport, AirportBoard, AirportFlight, AirportInfoResult, Navaid, NotamResult, TrackPoint, Weather, WeatherReport } from '@flightradar/shared';
+import type { Aircraft, AircraftResult, Airport, AirportBoard, AirportFlight, AirportInfoResult, Navaid, NotamResult, TrackPoint, Weather, WeatherReport } from 'meow-open-flight-core/shared';
 import { aircraftStreamUrl, getAirport, getAirportFlights, getHealth, getNotams, getRunwaysGeoJSON, getSettings, getTrack, getWeather, refreshUpstream, searchAirports, setProvider, updateViewport } from './api';
 import { parseFilter } from './filter';
 import type { AirportSummary, SettingsResponse } from './api';
