@@ -13,6 +13,15 @@
 - 临时分支用完即删，避免仓库里堆积历史分支。
 - 发布时从 `dev` 开一个 `dev → main` PR，合并后再打版本 tag。
 
+## 任务记录
+
+项目用 **GitHub Issues** 记录开发，不使用 GitHub Projects。
+
+- 新功能 / 修复 / 文档任务先开 Issue。
+- 完成时关闭 Issue，并在提交信息或关闭评论里引用 PR / commit。
+- **开始时间 = Issue 创建时间；完成时间 = Issue 关闭时间。**
+- 不再创建 `project-*` 工作流，也不维护 Project 的日期字段。
+
 ## 提交记录
 
 在 `dev` 上保持清晰、可追溯的提交：
