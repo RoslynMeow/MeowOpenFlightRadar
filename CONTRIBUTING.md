@@ -15,12 +15,14 @@
 
 ## 任务记录
 
-项目用 **GitHub Issues** 记录开发，不使用 GitHub Projects。
+项目用 **GitHub Issues** 记录开发，[Project #5](https://github.com/users/RoslynMeow/projects/5) 只作为展示视图。
 
 - 新功能 / 修复 / 文档任务先开 Issue。
 - 完成时关闭 Issue，并在提交信息或关闭评论里引用 PR / commit。
 - **开始时间 = Issue 创建时间；完成时间 = Issue 关闭时间。**
-- 不再创建 `project-*` 工作流，也不维护 Project 的日期字段。
+- 取消 / 暂缓的 Issue 加 `canceled` / `deferred` 标签。
+- 新 Issue 需要加入 Project，并把 Start / End 字段按 Issue 日期填写。
+- 不创建 `project-*` 自动日期工作流；Project 不写入 Issue 之外的日期。
 
 ## 提交记录
 
